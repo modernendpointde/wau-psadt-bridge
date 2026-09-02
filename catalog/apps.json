@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "apps": {
+    "7zip.7zip": {
+      "displayName": "7-Zip",
+      "processes": ["7zFM", "7zG"]
+    },
+    "Google.Chrome": {
+      "displayName": "Google Chrome",
+      "processes": ["chrome"]
+    },
+    "Mozilla.Firefox": {
+      "displayName": "Mozilla Firefox",
+      "processes": ["firefox"]
+    },
+    "Mozilla.Firefox.de": {
+      "displayName": "Mozilla Firefox",
+      "processes": ["firefox"]
+    }
+  }
+}

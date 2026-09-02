@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "messages": {
+    "Subtitle": [],
+    "UpgradeTitle": ["AppName"],
+    "UpgradeBeforeDeadline": ["AppName", "ProcessDisplayNames", "FinalDeadlineText", "DesktopShortcutName"],
+    "UpgradeAfterDeadline": ["AppName", "ProcessDisplayNames"],
+    "UpgradeNoDeadline": ["AppName", "ProcessDisplayNames"],
+    "DesktopShortcutNameUpgrade": ["AppName"],
+    "DesktopShortcutDescriptionUpgrade": ["AppName"],
+    "UpgradeStatusMessage": ["AppName"],
+    "UpgradeSuccessSubtitle": [],
+    "UpgradeSuccess": ["AppName"],
+    "SuccessButtonText": []
+  }
+}

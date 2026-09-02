@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "wingetId": "Google.Chrome",
+  "displayName": "Google Chrome",
+  "targetVersionRaw": "140.0.7339.127",
+  "targetVersion": "140.0.7339.127",
+  "processes": [
+    "chrome"
+  ]
+}

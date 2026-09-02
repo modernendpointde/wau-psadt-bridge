@@ -1,0 +1,10 @@
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+*.tmp
+*~
+*.swp
+.idea/
+.vscode/
+__pycache__/
