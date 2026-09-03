@@ -182,8 +182,26 @@ function Test-WauUpdateAppContainsHandoff {
 function Test-WauOriginalUpdateAppBackup {
     param([string]$LiteralPath)
 
-    if (-not $LiteralPath -or -not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) { return $false }
-    return -not (Test-WauUpdateAppContainsHandoff -LiteralPath $LiteralPath)
+    if (
+        -not $LiteralPath -or
+        -not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)
+    ) {
+        return $false
+    }
+
+    if (Test-WauUpdateAppContainsHandoff -LiteralPath $LiteralPath) {
+        return $false
+    }
+
+    try {
+        return (
+            (Get-NormalizedSha256 -LiteralPath $LiteralPath) -eq
+            $script:SupportedWauUpdateAppSha256
+        )
+    }
+    catch {
+        return $false
+    }
 }
 
 function Install-BridgeDirectoryAcl {
@@ -260,7 +278,11 @@ function Install-WauPsadtBridgePayload {
     }
 
     $catalog = Get-Content -LiteralPath $catalogSource -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ([int]$catalog.schemaVersion -ne 1 -or $null -eq $catalog.apps) {
+    if (
+        [int]$catalog.schemaVersion -ne 1 -or
+        $null -eq $catalog.apps -or
+        $catalog.apps -isnot [pscustomobject]
+    ) {
         throw "catalog/apps.json schema is invalid: [$catalogSource]."
     }
 
@@ -289,9 +311,10 @@ function Install-WauPsadtBridgePayload {
     New-Item -ItemType Directory -Path (Split-Path -Path $script:GoldenInstallRoot -Parent) -Force | Out-Null
     New-Item -ItemType Directory -Path $script:WorkInstallRoot -Force | Out-Null
 
-    if (-not $destHasHandoff -and -not (Test-Path -LiteralPath $backupDest -PathType Leaf)) {
+    if (-not $destHasHandoff -and -not $backupIsOriginal) {
         Copy-Item -LiteralPath $updateAppDest -Destination $backupDest -Force
-        Write-BridgeInstallLog "Backed up Update-App.ps1 -> $backupDest"
+        $backupIsOriginal = $true
+        Write-BridgeInstallLog "Backed up validated stock Update-App.ps1 -> $backupDest"
     }
 
     Copy-Item -LiteralPath $catalogSource -Destination $script:CatalogInstallPath -Force

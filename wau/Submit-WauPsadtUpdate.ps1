@@ -75,7 +75,11 @@ function Get-WauPsadtBridgeCatalog {
         throw "WAU-PSADT Bridge catalog could not be parsed: [$path]. Update cycle aborted."
     }
 
-    if ([int]$catalog.schemaVersion -ne 1 -or $null -eq $catalog.apps) {
+    if (
+        [int]$catalog.schemaVersion -ne 1 -or
+        $null -eq $catalog.apps -or
+        $catalog.apps -isnot [pscustomobject]
+    ) {
         throw "WAU-PSADT Bridge catalog schema is invalid: [$path]. Update cycle aborted."
     }
 

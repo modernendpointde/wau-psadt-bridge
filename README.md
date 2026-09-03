@@ -29,8 +29,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-WauPsadtBridge
 The script copies files onto the machine. It does not create a scheduled task. Updates keep using `\WAU\Winget-AutoUpdate`.
 
 1. Locates WAU (`HKLM:\SOFTWARE\Romanitho\Winget-AutoUpdate\InstallLocation`, otherwise `C:\Program Files\Winget-AutoUpdate`).
-2. Checks that WAU is **2.12.0** and that `functions\Update-App.ps1` is that stock file or already contains the bridge handoff. An unknown file aborts the install. Reinstall aborts if the handoff is present and no valid original `.pre-bridge` backup exists.
-3. Backs up `functions\Update-App.ps1` to `Update-App.ps1.pre-bridge` only when that file is not already patched.
+2. Checks that WAU is **2.12.0** and that `functions\Update-App.ps1` is that stock file or already contains the bridge handoff. An unknown file aborts the install. Reinstall aborts if the handoff is present and no `.pre-bridge` backup matches the supported WAU 2.12.0 SHA-256.
+3. Backs up `functions\Update-App.ps1` to `Update-App.ps1.pre-bridge` when that file is the supported stock file and the backup is missing or is not that stock file.
 4. Copies `wau\Submit-WauPsadtUpdate.ps1` and `wau\Update-App.ps1` into WAU `\functions`.
 5. Copies `catalog\apps.json` to `C:\Program Files\WauPsadtBridge\bridge.catalog.json`.
 6. Copies `template\` to `C:\Program Files\WauPsadtBridge\Template\`.
@@ -41,7 +41,7 @@ The script copies files onto the machine. It does not create a scheduled task. U
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-WauPsadtBridge.ps1 -Uninstall
 ```
 
-Uninstall restores WAU `Update-App.ps1` from the backup only when that file still contains the bridge handoff. If WAU has already replaced it, the current file is left in place. If the backup is missing while the handoff is still present, uninstall aborts and changes nothing. The copied Submit function, `bridge.catalog.json`, `install-state.json`, the golden template, and `Work\` are removed. WAU scheduled tasks are left unchanged. Existing campaign folders under `WauPsadtBridge\Stage\<Id>\<Version>` are left in place. The `WauPsadtBridge` root is removed only if it is then empty.
+Uninstall restores WAU `Update-App.ps1` from the backup only when that file still contains the bridge handoff and the backup matches the supported WAU 2.12.0 SHA-256. If WAU has already replaced it, the current file is left in place. If the backup is missing or is not that stock file while the handoff is still present, uninstall aborts and changes nothing. The copied Submit function, `bridge.catalog.json`, `install-state.json`, the golden template, and `Work\` are removed. WAU scheduled tasks are left unchanged. Existing campaign folders under `WauPsadtBridge\Stage\<Id>\<Version>` are left in place. The `WauPsadtBridge` root is removed only if it is then empty.
 
 ## How an update runs
 
@@ -110,7 +110,7 @@ Example from a 7-Zip catalog upgrade (`en-US`). Dialogs follow the interactive u
 }
 ```
 
-`processes` are `Get-Process -Name` values (no path, no `.exe`). A valid catalog with an invalid process list on one ID skips that ID (no native WAU, no bridge) and keeps the file valid.
+`processes` are `Get-Process -Name` values (no path, no `.exe`). A valid catalog with an invalid process list on one ID skips that ID (no native WAU, no bridge) and keeps the file valid. `schemaVersion` must be 1 and `apps` must be a JSON object; otherwise the catalog file is invalid and the WAU cycle stops.
 
 Shipped IDs:
 
