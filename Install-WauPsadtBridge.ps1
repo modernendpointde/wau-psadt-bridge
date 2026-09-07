@@ -260,6 +260,22 @@ function Read-BridgeInstallState {
     return (Get-Content -LiteralPath $script:StatePath -Raw -Encoding UTF8 | ConvertFrom-Json)
 }
 
+function Remove-BridgeEmptyStageDirectories {
+    param([Parameter(Mandatory)][string]$StageRoot)
+
+    if (-not (Test-Path -LiteralPath $StageRoot -PathType Container)) { return }
+    foreach ($packageDirectory in @(Get-ChildItem -LiteralPath $StageRoot -Directory -Force -ErrorAction Stop)) {
+        if (@(Get-ChildItem -LiteralPath $packageDirectory.FullName -Force -ErrorAction Stop).Count -eq 0) {
+            Remove-Item -LiteralPath $packageDirectory.FullName -Force -ErrorAction Stop
+            Write-BridgeInstallLog "Removed empty $($packageDirectory.FullName)"
+        }
+    }
+    if (@(Get-ChildItem -LiteralPath $StageRoot -Force -ErrorAction Stop).Count -eq 0) {
+        Remove-Item -LiteralPath $StageRoot -Force -ErrorAction Stop
+        Write-BridgeInstallLog "Removed empty $StageRoot"
+    }
+}
+
 function Install-WauPsadtBridgePayload {
     $templateRoot = Join-Path $script:RepoRoot 'template'
     $catalogSource = Join-Path $script:RepoRoot 'catalog\apps.json'
@@ -407,6 +423,7 @@ function Uninstall-WauPsadtBridgePayload {
         Remove-Item -LiteralPath $script:StatePath -Force
         Write-BridgeInstallLog "Removed $script:StatePath"
     }
+    Remove-BridgeEmptyStageDirectories -StageRoot (Join-Path $script:BridgeInstallRoot 'Stage')
     if (Test-Path -LiteralPath $script:CatalogInstallDir) {
         $remaining = @(Get-ChildItem -LiteralPath $script:CatalogInstallDir -Force -ErrorAction SilentlyContinue)
         if ($remaining.Count -eq 0) {

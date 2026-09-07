@@ -246,7 +246,7 @@ Mapping to operation:
 
 `InstalledSameVersion` and `InstalledNewerVersion` are no-op states in the install lifecycle. A higher installed version is left in place. When an owned schedule is present (`Test-WauBridgeSchedulePresent`), the lifecycle calls `Complete-WauBridgeSchedule` (no UI, no installer).
 
-Install/upgrade uses the same evidence. An active campaign is recognized when registry state is `Staged`, `Deferred`, or `InProgress`.
+Install/upgrade uses the same evidence. Before WAU skips registry state in `Staged`, `Deferred`, or `InProgress`, it verifies the registry identity, StageRoot marker, schedule state, and complete retry-task contract. A proven but incomplete orphan is removed and may be recreated; any unproven collision is left untouched and fails closed for that package.
 
 ## 10. Install lifecycle
 
@@ -342,6 +342,8 @@ Recursive StageRoot cleanup requires:
 - a marker path inside the expected StageRoot;
 - a contained path that is not a drive root.
 
+After an owned StageRoot is removed, its package parent and then `Stage\` are removed only when each directory is empty and the package parent is a direct child of the canonical Stage root.
+
 ### 14.2 Retry task
 
 The retry task uses:
@@ -369,7 +371,7 @@ The HKLM key holds `SchemaVersion=2`, `ResourceType=WauBridgeCampaign`, identiti
 
 `Set-WauBridgeCampaignState` writes this contract.
 
-Removal requires matching CampaignId and PackageId. Active-campaign detection accepts only `Staged`, `Deferred`, or `InProgress`.
+Removal requires matching CampaignId and PackageId. WAU-side active-campaign detection accepts only `Staged`, `Deferred`, or `InProgress`, then validates all related resources before deciding whether the campaign is healthy, safely recoverable, or blocked by an unproven collision.
 
 ### 14.5 Desktop shortcut and completion
 
@@ -459,6 +461,7 @@ Those checks do not mutate production Windows resources. Native Windows executio
 | Schedule is recreated | Stored policy, task contract, or triggers no longer match | Compare the current `Retry` configuration with `ScheduleState.json`. |
 | Staging aborts | Robocopy exit code greater than 7 | Check Robocopy output, source path, and destination path. |
 | StageRoot remains | Ownership marker missing or mismatched | Compare `.waubridge-owner.json` with the computed context. |
+| Catalog ID stays blocked by an active campaign | A related task, StageRoot, state, shortcut, or registry value is missing or fails ownership validation | Check the WAU log for `healthy active campaign`, `removed recoverable orphan`, or `cannot reconcile campaign`. |
 | Winget detection stays negative | Winget missing, export failed, or exact ID missing | Check the Winget path, export JSON, and configured ID. |
 | Bridge mutex skip (exit 1618) | `Global\WauPsadtBridge.Update` already held, often by another catalog app’s Welcome on the retry task in the same WAU foreach | Wait for the next WAU cycle or the owned reminder task. Same-cycle catalog apps are not queued. |
 
@@ -494,7 +497,6 @@ Before replacing active packages, map existing campaign resources by CampaignId,
 | Windows resources, state, and cleanup | `Framework/WauBridge.Compatibility.ps1` |
 | Winget | `Framework/WauBridge.Winget.ps1` |
 | WauBridge.Campaign.json overlay | `Framework/WauBridge.CampaignJson.ps1` |
-| Active campaigns per PackageId | `Framework/WauBridge.Compatibility.ps1` |
 
 ## 22. Campaign mode via WauBridge.Campaign.json
 
@@ -514,7 +516,7 @@ Runtime behavior:
 - Install: `Invoke-WauBridgeWingetUpgrade`. Success requires a Winget exit code in Success/Reboot **and** `InstalledVersion >= TargetVersion`.
 - Versioned detection: `Get-WauBridgeWingetInstalledVersion` via `winget export --include-versions` into a unique temp file.
 
-`Get-WauBridgeActiveCampaignsForPackageId` reads `HKLM:\SOFTWARE\WauPsadtBridge\Campaigns` and returns campaigns whose `PackageId` matches, `ResourceType=WauBridgeCampaign`, schema 2, and state `Staged` / `Deferred` / `InProgress`. Foreign keys are skipped, not deleted.
+The WAU handoff reads `HKLM:\SOFTWARE\WauPsadtBridge\Campaigns` for matching active states. It skips a healthy campaign, removes an incomplete campaign only when every existing resource independently matches its ownership contract, and leaves any ambiguous or foreign collision untouched.
 
 The WAU side (catalog, working copy, `Update-App` handoff) lives outside this directory and is described in the repository [README.md](../README.md). The golden copy of this template is installed by `Install-WauPsadtBridge.ps1` to `C:\Program Files\WauPsadtBridge\Template\`. Bootstrap executes from `C:\Program Files\WauPsadtBridge\Work\<guid>\`. That installer creates no scheduled task.
 

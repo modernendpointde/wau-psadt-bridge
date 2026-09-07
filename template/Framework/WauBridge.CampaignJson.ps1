@@ -53,7 +53,7 @@ function Import-WauBridgeCampaignJson {
 
     $processDefinitions = foreach ($processName in $processes) {
         $name = [string]$processName
-        if ([string]::IsNullOrWhiteSpace($name) -or $name -match '[\\/:]' -or $name -match '\.exe$') {
+        if ([string]::IsNullOrWhiteSpace($name) -or $name -match '[\\/:*?\[\]]' -or $name -match '\.exe$') {
             throw "WauBridge.Campaign.json processes contains an invalid Get-Process name: [$name]."
         }
         $name

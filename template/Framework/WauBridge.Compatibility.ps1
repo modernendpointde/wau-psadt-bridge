@@ -655,36 +655,6 @@ function Get-WauBridgeCampaignState {
     }
 }
 
-function Get-WauBridgeActiveCampaignsForPackageId {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$PackageId)
-
-    $basePath = Get-WauBridgeRegistryBasePath
-    if (-not (Test-Path -LiteralPath $basePath)) { return @() }
-
-    $activeStates = @('Staged', 'Deferred', 'InProgress')
-    $result = New-Object System.Collections.Generic.List[object]
-    foreach ($key in @(Get-ChildItem -LiteralPath $basePath -ErrorAction SilentlyContinue)) {
-        try {
-            $raw = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
-            if ([int]$raw.SchemaVersion -ne 2 -or [string]$raw.ResourceType -ne 'WauBridgeCampaign') { continue }
-            if ([string]$raw.PackageId -ine $PackageId) { continue }
-            if ([string]$raw.State -notin $activeStates) { continue }
-            $result.Add([pscustomobject]@{
-                CampaignId    = [string]$raw.CampaignId
-                PackageId     = [string]$raw.PackageId
-                TargetVersion = [string]$raw.TargetVersion
-                State         = [string]$raw.State
-                TaskPath      = [string]$raw.TaskPath
-                TaskName      = [string]$raw.TaskName
-                Operation     = [string]$raw.Operation
-            }) | Out-Null
-        }
-        catch { }
-    }
-    return @($result)
-}
-
 function Remove-WauBridgeCampaignState {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Context)
@@ -1037,6 +1007,32 @@ function Complete-WauBridgeSchedule {
     Register-WauBridgeCleanupTask -Context $Context
 }
 
+function Remove-WauBridgeEmptyStageParents {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Context,
+        [string]$StageBasePath = (Join-Path (Get-WauBridgeInstallRoot) 'Stage')
+    )
+
+    try {
+        $stageRoot = Get-WauBridgeCanonicalPath -Path $Context.Runtime.StageRoot
+        $stageBase = Get-WauBridgeCanonicalPath -Path $StageBasePath
+        $packageRoot = Split-Path -Path $stageRoot -Parent
+        if (Test-Path -LiteralPath $stageRoot) { return }
+        if ((Split-Path -Path $packageRoot -Parent).TrimEnd('\','/') -ine $stageBase.TrimEnd('\','/')) { return }
+
+        if ((Test-Path -LiteralPath $packageRoot -PathType Container) -and @(Get-ChildItem -LiteralPath $packageRoot -Force -ErrorAction Stop).Count -eq 0) {
+            Remove-Item -LiteralPath $packageRoot -Force -ErrorAction Stop
+        }
+        if ((Test-Path -LiteralPath $stageBase -PathType Container) -and @(Get-ChildItem -LiteralPath $stageBase -Force -ErrorAction Stop).Count -eq 0) {
+            Remove-Item -LiteralPath $stageBase -Force -ErrorAction Stop
+        }
+    }
+    catch {
+        Write-WauBridgeLog -Message ("Empty Stage parent cleanup was skipped: {0}" -f $_.Exception.Message) -Severity 2
+    }
+}
+
 function Remove-WauBridgeSchedule {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Context,[switch]$RemoveStageRoot)
@@ -1082,6 +1078,7 @@ function Remove-WauBridgeSchedule {
             throw "StageRoot is not removed recursively without a matching ownership marker: [$($Context.Runtime.StageRoot)]."
         }
         Remove-Item -LiteralPath $Context.Runtime.StageRoot -Recurse -Force -ErrorAction Stop
+        Remove-WauBridgeEmptyStageParents -Context $Context
     }
 }
 
