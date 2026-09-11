@@ -14,6 +14,8 @@ $example = Get-Content -LiteralPath $examplePath -Raw -Encoding UTF8 | ConvertFr
 Assert-True ([int]$example.schemaVersion -eq 1) 'example schemaVersion'
 Assert-True ($example.wingetId -eq 'Google.Chrome') 'example wingetId'
 Assert-True (@($example.processes) -contains 'chrome') 'example processes'
+Assert-True ([bool]$example.ui.progress) 'example progress'
+Assert-True ([bool]$example.ui.success) 'example success'
 
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ('wau-psadt-campaignjson-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $work 'App') | Out-Null
@@ -57,6 +59,55 @@ Assert-True ([bool]$WauBridgeConfig.UserExperience.ShowSuccess) 'success prompt 
 Assert-True ([int]$WauBridgeConfig.UserExperience.CloseCountdownSeconds -eq 300) 'close countdown from config'
 Assert-True ($null -ne (ConvertTo-Version '140.0.7339.127')) 'ConvertTo-Version'
 Assert-True ($WauBridgeConfig.TargetVersion -eq (ConvertTo-Version '140.0.7339.127')) 'TargetVersion parsed'
+
+$campaignBase = [ordered]@{
+    schemaVersion = 1
+    wingetId = 'Google.Chrome'
+    displayName = 'Google Chrome'
+    targetVersionRaw = '140.0.7339.127'
+    targetVersion = '140.0.7339.127'
+    processes = @('chrome')
+}
+
+$WauBridgeConfig.UserExperience.ShowProgressSilent = $false
+$WauBridgeConfig.UserExperience.ShowProgressInteractive = $false
+$WauBridgeConfig.UserExperience.ShowSuccess = $false
+($campaignBase | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $work 'WauBridge.Campaign.json') -Encoding UTF8
+$null = Import-WauBridgeCampaignJson -ScriptRoot $work
+Assert-True ([bool]$WauBridgeConfig.UserExperience.ShowProgressSilent) 'omitted campaign ui defaults silent progress to true'
+Assert-True ([bool]$WauBridgeConfig.UserExperience.ShowProgressInteractive) 'omitted campaign ui defaults interactive progress to true'
+Assert-True ([bool]$WauBridgeConfig.UserExperience.ShowSuccess) 'omitted campaign ui defaults success to true'
+
+$campaignWithDisabledUi = [ordered]@{} + $campaignBase
+$campaignWithDisabledUi.ui = [ordered]@{ progress = $false; success = $false }
+($campaignWithDisabledUi | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $work 'WauBridge.Campaign.json') -Encoding UTF8
+$null = Import-WauBridgeCampaignJson -ScriptRoot $work
+Assert-True (-not [bool]$WauBridgeConfig.UserExperience.ShowProgressSilent) 'campaign progress false disables silent progress'
+Assert-True (-not [bool]$WauBridgeConfig.UserExperience.ShowProgressInteractive) 'campaign progress false disables interactive progress'
+Assert-True (-not [bool]$WauBridgeConfig.UserExperience.ShowSuccess) 'campaign success false disables success prompt'
+
+$campaignWithPartialUi = [ordered]@{} + $campaignBase
+$campaignWithPartialUi.ui = [ordered]@{ progress = $false }
+($campaignWithPartialUi | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $work 'WauBridge.Campaign.json') -Encoding UTF8
+$null = Import-WauBridgeCampaignJson -ScriptRoot $work
+Assert-True (-not [bool]$WauBridgeConfig.UserExperience.ShowProgressSilent) 'partial campaign ui applies progress false'
+Assert-True ([bool]$WauBridgeConfig.UserExperience.ShowSuccess) 'partial campaign ui defaults success to true'
+
+$invalidUiCases = @(
+    [pscustomobject]@{ Name = 'non-object'; Value = 'disabled'; Pattern = 'ui must be an object' },
+    [pscustomobject]@{ Name = 'string progress'; Value = [ordered]@{ progress = 'false' }; Pattern = 'ui.progress must be Boolean' },
+    [pscustomobject]@{ Name = 'numeric success'; Value = [ordered]@{ success = 0 }; Pattern = 'ui.success must be Boolean' },
+    [pscustomobject]@{ Name = 'unknown key'; Value = [ordered]@{ restart = $false }; Pattern = 'unknown key' }
+)
+foreach ($case in $invalidUiCases) {
+    $invalidUiCampaign = [ordered]@{} + $campaignBase
+    $invalidUiCampaign.ui = $case.Value
+    ($invalidUiCampaign | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $work 'WauBridge.Campaign.json') -Encoding UTF8
+    $rejected = $false
+    try { $null = Import-WauBridgeCampaignJson -ScriptRoot $work }
+    catch { $rejected = $_.Exception.Message -match $case.Pattern }
+    Assert-True $rejected "invalid campaign ui [$($case.Name)] is rejected"
+}
 
 foreach ($invalidProcessName in @('chrome*', 'chrome?', '[c]hrome', 'chrome.exe', 'chrome/path')) {
     $invalidCampaign = [ordered]@{
@@ -104,8 +155,8 @@ Assert-True ($invokeText -match 'Import-WauBridgeCampaignJson') 'invoke imports 
 Assert-True ($invokeText -notmatch 'function Uninstall-ADTDeployment') 'no uninstall lifecycle'
 Assert-True ($invokeText -notmatch 'function Repair-ADTDeployment') 'no repair lifecycle'
 Assert-True ($invokeText -match "ValidateSet\('Bootstrap', 'RetryTask'\)") 'invocation sources are Bootstrap and RetryTask'
-Assert-True ($invokeText -match "AppScriptVersion\s+=\s+\[version\]'0\.1\.1'") 'AppScriptVersion is 0.1.1'
-Assert-True ($invokeText -match "AppScriptDate\s+=\s+'2026-09-05'") 'AppScriptDate is 2026-09-05'
+Assert-True ($invokeText -match "AppScriptVersion\s+=\s+\[version\]'0\.2\.0'") 'AppScriptVersion is 0.2.0'
+Assert-True ($invokeText -match "AppScriptDate\s+=\s+'2026-09-07'") 'AppScriptDate is 2026-09-07'
 Assert-True ($invokeText -notmatch "'Shortcut'") 'no Shortcut invocation source'
 $compatShortcutText = Get-Content -LiteralPath (Join-Path $templateRoot 'Framework/WauBridge.Compatibility.ps1') -Raw
 Assert-True ($compatShortcutText -match 'Start-ScheduledTask -TaskPath') 'shortcut arguments start the scheduled task'

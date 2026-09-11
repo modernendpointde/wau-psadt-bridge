@@ -17,9 +17,10 @@ resources and troubleshooting: [TECHNICAL-REFERENCE.md](TECHNICAL-REFERENCE.md).
 
 ## Runtime overlay
 
-`WauBridge.Campaign.json` supplies `PackageId`, `DisplayName`, target version and
-process names. `App/WauBridge.Config.ps1` is policy only (retry, UX flags,
-localization). `Config/config.psd1` holds PSADT dialog timeout and company name.
+`WauBridge.Campaign.json` supplies `PackageId`, `DisplayName`, target version,
+process names, and optional progress/success values. `App/WauBridge.Config.ps1`
+holds retry, restart, and localization policy. `Config/config.psd1` holds PSADT
+dialog timeout and company name.
 Task names, StageRoot, and registry paths are derived at runtime.
 
 After load:
@@ -29,6 +30,8 @@ After load:
   `Retry.TimesPerDay` random times in `HoursStart`–`HoursEnd`. The first Welcome
   is today’s slot. The last random time is the deadline.
 - After the deadline, if Welcome was already shown: `CloseCountdownSeconds`.
+- Catalog `ui.progress` controls both progress paths and `ui.success` controls
+  the completion prompt. Missing values default to enabled.
 - `Localization.Culture` is `Auto`, fallback `en-US`.
 
 Add catalog IDs in `catalog/apps.json`. Do not edit `Framework/` or vendored

@@ -27,7 +27,7 @@ The suite covers:
 
 - Bridge installer and uninstaller contracts
 - WAU handoff and catalog validation
-- Campaign JSON validation
+- Campaign JSON and per-application UI validation
 - Campaign health and ownership classification
 - Deferral schedule calculation
 - Campaign lifecycle and staging cleanup
@@ -115,6 +115,26 @@ Expected result:
 - Native WAU processing does not update the affected catalog application.
 
 Restore an exact process name before continuing.
+
+### Per-application UI settings
+
+1. Choose a catalog application for which Winget offers an upgrade.
+2. Remove its complete `ui` object, close its configured processes, and start the Winget-AutoUpdate scheduled task.
+3. Confirm that progress and completion prompts remain enabled by default when exactly one interactive user is active.
+4. Restore an older application version or the test snapshot.
+5. Set both `ui.progress` and `ui.success` to `false`, start one configured process, and run the task again.
+6. Confirm that Welcome and deferral still operate, the staged campaign contains both Boolean values, and neither progress nor completion is shown when the campaign resumes.
+7. Replace one Boolean with a string, then repeat with an unknown UI key.
+
+Expected result:
+
+- Missing UI settings preserve the existing enabled behavior.
+- Explicit `false` values suppress only the corresponding progress or completion prompt.
+- Welcome, deferral, deadline, restart, and process handling remain unchanged.
+- Invalid types and unknown keys reject only the affected catalog entry.
+- Native WAU processing does not update an application whose catalog entry is invalid.
+
+Restore the shipped catalog before continuing.
 
 ### Uninstallation
 

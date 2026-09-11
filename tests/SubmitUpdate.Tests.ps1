@@ -80,6 +80,14 @@ Assert-True (Test-WauPsadtCatalogProcesses -Entry (Resolve-WauPsadtCatalogApp -C
 foreach ($invalidProcessName in @('chrome*', 'chrome?', '[c]hrome', 'chrome.exe', 'chrome/path')) {
     Assert-True (-not (Test-WauPsadtCatalogProcesses -Entry ([pscustomobject]@{ processes = @($invalidProcessName) }))) "invalid catalog process [$invalidProcessName] is rejected"
 }
+Assert-True (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome') })) 'omitted catalog ui is valid'
+Assert-True (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = [pscustomobject]@{} })) 'empty catalog ui uses defaults'
+Assert-True (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = [pscustomobject]@{ progress = $false; success = $true } })) 'Boolean catalog ui is valid'
+Assert-True (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = [pscustomobject]@{ progress = $false } })) 'partial catalog ui is valid'
+Assert-True (-not (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = 'disabled' }))) 'non-object catalog ui is rejected'
+Assert-True (-not (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = [pscustomobject]@{ progress = 'false' } }))) 'string catalog progress is rejected'
+Assert-True (-not (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = [pscustomobject]@{ success = 0 } }))) 'numeric catalog success is rejected'
+Assert-True (-not (Test-WauPsadtCatalogUi -Entry ([pscustomobject]@{ processes = @('chrome'); ui = [pscustomobject]@{ restart = $false } }))) 'unknown catalog ui key is rejected'
 
 $app = [pscustomobject]@{ Name = 'VLC'; Id = 'VideoLAN.VLC'; Version = '1.0'; AvailableVersion = '1.1' }
 Assert-True (-not (Submit-WauPsadtUpdate -App $app -Source 'winget')) 'unknown id uses WAU path'
@@ -122,6 +130,24 @@ $script:WauPsadtBridgeCatalog = $null
 $script:WauPsadtBridgeCatalogPath = $badCatalogPath
 Assert-True (Submit-WauPsadtUpdate -App $app -Source 'winget') 'invalid catalog processes fail closed'
 Remove-Item -LiteralPath $badCatalogPath -Force
+
+$badUiCatalogPath = Join-Path ([System.IO.Path]::GetTempPath()) ('bad-ui-' + [guid]::NewGuid().ToString('N') + '.json')
+$badUiCatalog = [ordered]@{
+    schemaVersion = 1
+    apps = [ordered]@{
+        'Google.Chrome' = [ordered]@{
+            displayName = 'Google Chrome'
+            processes   = @('chrome')
+            ui          = [ordered]@{ progress = 'false' }
+        }
+    }
+}
+($badUiCatalog | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $badUiCatalogPath -Encoding UTF8
+$script:WauPsadtBridgeCatalog = $null
+$script:WauPsadtBridgeCatalogPath = $badUiCatalogPath
+Assert-True (Submit-WauPsadtUpdate -App $app -Source 'winget') 'invalid catalog ui fails closed for the package'
+Assert-True (@($script:WauPsadtTestLog | Where-Object { $_ -match 'catalog ui is invalid' }).Count -ge 1) 'invalid catalog ui is logged'
+Remove-Item -LiteralPath $badUiCatalogPath -Force
 $script:WauPsadtBridgeCatalog = $null
 $script:WauPsadtBridgeCatalogPath = $catalogSource
 $catalog = Get-WauPsadtBridgeCatalog
@@ -146,6 +172,27 @@ $written = Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8 | ConvertFrom-
 Assert-True ($written.wingetId -eq 'Google.Chrome') 'campaign wingetId'
 Assert-True ($written.targetVersion -eq '140.0.7339.127') 'campaign targetVersion'
 Assert-True (@($written.processes) -contains 'chrome') 'campaign processes'
+Assert-True ([bool]$written.ui.progress) 'campaign progress copied from catalog'
+Assert-True ([bool]$written.ui.success) 'campaign success copied from catalog'
+
+$firefoxEntry = Resolve-WauPsadtCatalogApp -Catalog $catalog -Id 'Mozilla.Firefox'
+$app.Id = 'Mozilla.Firefox'
+$app.Name = 'Mozilla Firefox'
+$jsonPath = Save-WauPsadtCampaignJson -DestinationRoot $campaignDir -App $app -CatalogEntry $firefoxEntry
+$writtenWithoutUi = Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-True ($null -eq $writtenWithoutUi.PSObject.Properties['ui']) 'omitted catalog ui stays omitted in campaign json'
+
+$partialUiEntry = [pscustomobject]@{
+    displayName = 'Google Chrome'
+    processes = @('chrome')
+    ui = [pscustomobject]@{ progress = $false }
+}
+$app.Id = 'Google.Chrome'
+$app.Name = 'Google Chrome'
+$jsonPath = Save-WauPsadtCampaignJson -DestinationRoot $campaignDir -App $app -CatalogEntry $partialUiEntry
+$writtenPartialUi = Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-True (-not [bool]$writtenPartialUi.ui.progress) 'explicit campaign progress false is serialized'
+Assert-True ([bool]$writtenPartialUi.ui.success) 'omitted catalog success is serialized with true default'
 
 $golden = Join-Path $workRoot 'golden'
 New-Item -ItemType Directory -Path $golden | Out-Null

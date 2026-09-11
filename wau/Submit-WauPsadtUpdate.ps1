@@ -116,6 +116,22 @@ function Test-WauPsadtCatalogProcesses {
     return $true
 }
 
+function Test-WauPsadtCatalogUi {
+    param($Entry)
+
+    if ($null -eq $Entry) { return $false }
+    $uiProperty = $Entry.PSObject.Properties['ui']
+    if ($null -eq $uiProperty) { return $true }
+
+    $ui = $uiProperty.Value
+    if ($null -eq $ui -or $ui -isnot [pscustomobject]) { return $false }
+    foreach ($property in $ui.PSObject.Properties) {
+        if ([string]$property.Name -notin @('progress', 'success')) { return $false }
+        if ($property.Value -isnot [bool]) { return $false }
+    }
+    return $true
+}
+
 function Test-WauPsadtAppSpecificMods {
     param([string]$Id)
 
@@ -549,6 +565,10 @@ function Save-WauPsadtCampaignJson {
         [Parameter(Mandatory)]$CatalogEntry
     )
 
+    if (-not (Test-WauPsadtCatalogUi -Entry $CatalogEntry)) {
+        throw 'Catalog UI must be an object containing only Boolean progress and success values.'
+    }
+
     $displayName = [string]$CatalogEntry.displayName
     if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = [string]$App.Name }
     $targetVersion = [string]$App.AvailableVersion
@@ -560,8 +580,20 @@ function Save-WauPsadtCampaignJson {
         targetVersion    = $targetVersion
         processes        = @($CatalogEntry.processes | ForEach-Object { [string]$_ })
     }
+    $catalogUiProperty = $CatalogEntry.PSObject.Properties['ui']
+    if ($null -ne $catalogUiProperty) {
+        $campaignUi = [ordered]@{
+            progress = $true
+            success  = $true
+        }
+        foreach ($property in $catalogUiProperty.Value.PSObject.Properties) {
+            if ([string]$property.Name -ieq 'progress') { $campaignUi.progress = [bool]$property.Value }
+            if ([string]$property.Name -ieq 'success') { $campaignUi.success = [bool]$property.Value }
+        }
+        $campaign['ui'] = $campaignUi
+    }
     $jsonPath = Join-Path $DestinationRoot 'WauBridge.Campaign.json'
-    ($campaign | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $jsonPath -Encoding UTF8 -ErrorAction Stop
+    ($campaign | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $jsonPath -Encoding UTF8 -ErrorAction Stop
     return $jsonPath
 }
 
@@ -621,6 +653,11 @@ function Submit-WauPsadtUpdate {
 
     if (-not (Test-WauPsadtCatalogProcesses -Entry $entry)) {
         Write-ToLog "WAU-PSADT Bridge skipped [$($App.Id)] because catalog processes are invalid. This catalog ID will not be updated." "Yellow"
+        return $true
+    }
+
+    if (-not (Test-WauPsadtCatalogUi -Entry $entry)) {
+        Write-ToLog "WAU-PSADT Bridge skipped [$($App.Id)] because catalog ui is invalid. This catalog ID will not be updated." "Yellow"
         return $true
     }
 

@@ -6,5 +6,9 @@
   "targetVersion": "140.0.7339.127",
   "processes": [
     "chrome"
-  ]
+  ],
+  "ui": {
+    "progress": true,
+    "success": true
+  }
 }

@@ -12,7 +12,7 @@ This reference describes the source in this directory: the PowerShell components
 
 | Area | Responsibility |
 |---|---|
-| Package configuration | `App/WauBridge.Config.ps1` holds policy; `Config/config.psd1` holds PSADT UI timeout and company name; `WauBridge.Campaign.json` adds identity, target version, and processes. |
+| Package configuration | `App/WauBridge.Config.ps1` holds global policy; `Config/config.psd1` holds PSADT UI timeout and company name; `WauBridge.Campaign.json` adds identity, target version, processes, and optional progress/success values. |
 | Package-specific code | `App/` holds Winget detection and Winget upgrade. |
 | Framework | `Framework/` validates configuration and implements shared runtime contracts. |
 | PSADT | `PSAppDeployToolkit/` supplies session, UI, logging, and process adapters. |
@@ -27,7 +27,7 @@ Native Windows execution must be validated on a Windows test system.
 ```text
 .
 ├── App/
-│   ├── WauBridge.Config.ps1          retry and UX policy; identity comes from campaign JSON
+│   ├── WauBridge.Config.ps1          retry, restart, and localization policy
 │   ├── WauBridge.Detect.ps1          Winget version and presence
 │   └── WauBridge.Install.ps1         winget upgrade
 ├── Assets/                     packaged icons and banner
@@ -131,7 +131,7 @@ A failure opening the PSADT session exits `60008`. Unhandled errors after a succ
 
 ## 7. Configuration contract
 
-`App/WauBridge.Config.ps1` is policy only. It does not hold package identity, task names, or paths. `WauBridge.Campaign.json` adds `PackageId`, `DisplayName`, `TargetVersion`, and `ProcessDefinitions` before preflight.
+`App/WauBridge.Config.ps1` is global policy only. It does not hold package identity, task names, or paths. `WauBridge.Campaign.json` adds `PackageId`, `DisplayName`, `TargetVersion`, and `ProcessDefinitions`, then overlays progress and success from the catalog before preflight.
 
 ### 7.1 Global execution
 
@@ -172,16 +172,18 @@ The adapter runs `winget upgrade --id <PackageId> --silent` and then requires `I
 
 | Field | Meaning |
 |---|---|
-| `ShowSuccess` | Completion prompt after a successful upgrade. |
+| `ShowSuccess` | Completion prompt after a successful upgrade; set from catalog `ui.success`, default `true`. |
 | `ShowRestartPrompt` | Restart prompt when the adapter returns a reboot exit code. |
 | `RestartPromptNoCountdown` | Restart prompt without countdown. |
 | `RestartCountdownSeconds` | Restart countdown length. |
 | `RestartCountdownNoHideSeconds` | Restart countdown remains visible for this many seconds. |
 | `CloseCountdownSeconds` | Welcome `CloseProcessesCountdown` after the deadline when `PromptShownCount` is at least 1. Range 1–3600. |
-| `ShowProgressSilent` | Progress UI when no catalog process is running. |
-| `ShowProgressInteractive` | Progress UI after Welcome. |
+| `ShowProgressSilent` | Progress UI when no catalog process is running; set from catalog `ui.progress`, default `true`. |
+| `ShowProgressInteractive` | Progress UI after Welcome; set from the same catalog `ui.progress` value. |
 
 Texts come from the active culture pack. Progress and success UI also require exactly one interactive user (`Test-WauBridgeHasInteractiveUser`).
+
+The optional campaign `ui` object accepts only Boolean `progress` and `success` keys. Unknown keys, non-Boolean values, and non-object `ui` values are rejected before a PSADT session opens. Missing keys default independently to `true`. Welcome, deferral, process handling, restart behavior, and message selection remain global and process-driven.
 
 `Config/config.psd1` is the PSADT overlay used by this template: `Toolkit.CompanyName` is `WAU PSADT Bridge`, `UI.DefaultTimeout` is 3300 seconds.
 
@@ -502,7 +504,7 @@ Before replacing active packages, map existing campaign resources by CampaignId,
 
 `WauBridge.Campaign.json` is required. `Import-WauBridgeCampaignJson` runs after all App/Framework scripts load and before `Assert-WauBridgeConfiguration`. Missing file: the run throws. `Cleanup-WauBridgePackage.ps1` loads the same file.
 
-The file is plain JSON (`ConvertFrom-Json`). It sets `PackageId`, `DisplayName`, `TargetVersion`, and process names as a string array. Retry policy and UX flags stay in `App/WauBridge.Config.ps1` (`Days=3`, `TimesPerDay=1` when a catalog process is running).
+The file is plain JSON (`ConvertFrom-Json`). It sets `PackageId`, `DisplayName`, `TargetVersion`, process names as a string array, and optional Boolean `ui.progress` / `ui.success` values copied from the catalog. Missing UI values default to `true`. Retry, restart, localization, and all remaining UX policy stay in `App/WauBridge.Config.ps1` (`Days=3`, `TimesPerDay=1` when a catalog process is running).
 
 Runtime behavior:
 
@@ -510,8 +512,8 @@ Runtime behavior:
 - Session guard via public `Get-ADTLoggedOnUser` before Welcome and before the bootstrap deferral short-circuit. Multiple active sessions, or a catalog process in another `SessionId`, skip Welcome, force-close, and Winget.
 - Bootstrap when `deferralEligible`: `Register-WauBridgeSchedule`, then release the mutex, then `Start-ScheduledTask` at most once.
 - After the deadline: `CloseProcessesCountdown` from `UserExperience.CloseCountdownSeconds`.
-- Progress: `ShowProgressSilent` and `ShowProgressInteractive` are on. Text comes from `UpgradeStatusMessage`. Progress is shown only when `Test-WauBridgeHasInteractiveUser` is true (exactly one active session).
-- Completion: `ShowSuccess` shows `UpgradeSuccess` / `UpgradeSuccessSubtitle` when exactly one interactive session is present.
+- Progress: catalog `ui.progress` sets both `ShowProgressSilent` and `ShowProgressInteractive`; it defaults to on. Text comes from `UpgradeStatusMessage`. Progress is shown only when `Test-WauBridgeHasInteractiveUser` is true (exactly one active session).
+- Completion: catalog `ui.success` sets `ShowSuccess` and defaults to on. The prompt uses `UpgradeSuccess` / `UpgradeSuccessSubtitle` when exactly one interactive session is present.
 - Language: `Localization.Culture=Auto` (interactive user’s Windows display language), fallback `en-US`. Additional languages: `Messages/<BCP-47>.psd1` modeled on `en-US.psd1`. `en-US` and `de-DE` ship with the template.
 - Install: `Invoke-WauBridgeWingetUpgrade`. Success requires a Winget exit code in Success/Reboot **and** `InstalledVersion >= TargetVersion`.
 - Versioned detection: `Get-WauBridgeWingetInstalledVersion` via `winget export --include-versions` into a unique temp file.

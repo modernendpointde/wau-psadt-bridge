@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0] - 2026-09-11
+
+### Added
+
+- Optional per-application `ui.progress` and `ui.success` settings in the bridge catalog.
+- Automated coverage for omitted UI settings, explicit Boolean values, invalid types, and unknown UI keys.
+
+### Changed
+
+- Validated per-application UI settings are carried into the campaign payload.
+- `ui.progress` controls both silent and post-Welcome progress dialogs.
+- `ui.success` controls the completion prompt after a successful upgrade.
+- Missing UI settings preserve the existing behavior by defaulting to enabled.
+- Welcome, deferral, restart, and process handling remain unchanged by the new UI settings.
+- Invalid UI settings fail closed for the affected package without native WAU fallback.
+
 ## [0.1.1] - 2026-09-07
 
 ### Added
@@ -39,5 +55,6 @@ All notable changes to this project are documented in this file.
 - English and German user-interface message packs.
 - Initial catalog entries for 7-Zip, Google Chrome, Mozilla Firefox, and Mozilla Firefox (DE).
 
+[0.2.0]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/modernendpointde/wau-psadt-bridge/releases/tag/v0.1.0

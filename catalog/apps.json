@@ -7,7 +7,11 @@
     },
     "Google.Chrome": {
       "displayName": "Google Chrome",
-      "processes": ["chrome"]
+      "processes": ["chrome"],
+      "ui": {
+        "progress": true,
+        "success": true
+      }
     },
     "Mozilla.Firefox": {
       "displayName": "Mozilla Firefox",

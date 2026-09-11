@@ -36,6 +36,26 @@ function Import-WauBridgeCampaignJson {
         $targetVersionRaw = [string]$campaign.targetVersionRaw
     }
     $processes = @($campaign.processes)
+    $showProgress = $true
+    $showSuccess = $true
+
+    $uiProperty = $campaign.PSObject.Properties['ui']
+    if ($null -ne $uiProperty) {
+        $ui = $uiProperty.Value
+        if ($null -eq $ui -or $ui -isnot [pscustomobject]) {
+            throw "WauBridge.Campaign.json ui must be an object: [$campaignPath]."
+        }
+        foreach ($property in $ui.PSObject.Properties) {
+            if ([string]$property.Name -notin @('progress', 'success')) {
+                throw "WauBridge.Campaign.json ui contains an unknown key: [$($property.Name)]."
+            }
+            if ($property.Value -isnot [bool]) {
+                throw "WauBridge.Campaign.json ui.$($property.Name) must be Boolean."
+            }
+            if ([string]$property.Name -ieq 'progress') { $showProgress = [bool]$property.Value }
+            if ([string]$property.Name -ieq 'success') { $showSuccess = [bool]$property.Value }
+        }
+    }
 
     if ([string]::IsNullOrWhiteSpace($wingetId) -or $wingetId -match '[\\/:*?"<>|]') {
         throw "WauBridge.Campaign.json wingetId is missing or contains illegal characters: [$campaignPath]."
@@ -63,6 +83,9 @@ function Import-WauBridgeCampaignJson {
     $WauBridgeConfig.DisplayName = $displayName
     $WauBridgeConfig.TargetVersion = $targetVersion
     $WauBridgeConfig.ProcessDefinitions = @($processDefinitions)
+    $WauBridgeConfig.UserExperience.ShowProgressSilent = $showProgress
+    $WauBridgeConfig.UserExperience.ShowProgressInteractive = $showProgress
+    $WauBridgeConfig.UserExperience.ShowSuccess = $showSuccess
 
     $script:WauBridgeCampaignJsonLoaded = $true
     return $true

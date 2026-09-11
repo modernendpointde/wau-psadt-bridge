@@ -28,13 +28,14 @@ WAU continues to decide which applications are eligible for an update. Applicati
 |---|---|
 | Update eligibility, include/exclude rules, outdated detection, and source selection | WAU |
 | Selection of applications that receive the PSADT experience | Bridge catalog |
-| Close-application dialog, deferral, deadline, progress, and completion UI | PSADT |
+| Close-application dialog, deferral, deadline, and configurable progress and completion UI | PSADT |
 | Package download and machine-scope upgrade | Winget |
 | Campaign state, scheduled retries, ownership validation, and cleanup | WAU PSADT Bridge |
 
 ### Key capabilities
 
 - Catalog-based routing by exact Winget package ID
+- Optional per-application progress and completion prompts with backward-compatible defaults
 - Process-aware PSADT welcome dialog and application closure
 - Silent upgrade when no configured application process is running
 - Usage-day deferrals, randomized reminders, and a final deadline
@@ -110,7 +111,7 @@ WAU calls `Submit-WauPsadtUpdate` for every offered package. The handoff follows
 | The WAU cycle is not running as SYSTEM | Native WAU Winget path |
 | The catalog is missing or structurally invalid | Stop the WAU cycle |
 | The package ID is not cataloged or the source is not `winget` | Native WAU Winget path |
-| The catalog entry is invalid | Skip the package without native fallback |
+| The catalog entry has invalid processes or UI settings | Skip the package without native fallback |
 | App-specific WAU modifications exist | Skip the package without native fallback |
 | The shared mutex is already held | Skip this cycle |
 | A healthy active campaign exists | Keep the campaign and skip this cycle |
@@ -120,7 +121,7 @@ WAU calls `Submit-WauPsadtUpdate` for every offered package. The handoff follows
 
 ### Runtime behavior
 
-- **No catalog process running:** Winget runs silently. Progress and completion UI appear only when enabled and exactly one interactive user is available.
+- **No catalog process running:** Winget runs silently. Per-application progress and completion prompts appear only when enabled and exactly one interactive user is available.
 - **Catalog process running:** PSADT presents the close-application and deferral experience to the interactive session that owns the process.
 - **Session guard unavailable:** Retry infrastructure is registered, but no user interface is shown from an unsafe or ambiguous session.
 - **Deferred campaign:** A public-desktop shortcut starts the owned retry task without changing the stored deadline.
@@ -158,9 +159,13 @@ The examples below show an English 7-Zip campaign. Dialogs follow the interactiv
       "displayName": "7-Zip",
       "processes": ["7zFM", "7zG"]
     },
-    "Mozilla.Firefox.de": {
-      "displayName": "Mozilla Firefox",
-      "processes": ["firefox"]
+    "Google.Chrome": {
+      "displayName": "Google Chrome",
+      "processes": ["chrome"],
+      "ui": {
+        "progress": true,
+        "success": true
+      }
     }
   }
 }
@@ -168,18 +173,27 @@ The examples below show an English 7-Zip campaign. Dialogs follow the interactiv
 
 Catalog keys are exact Winget package IDs. Locale-specific packages use separate entries. Process values are exact `Get-Process -Name` names without paths, `.exe` suffixes, or wildcard characters.
 
-| Winget ID | Display name | Processes |
-|---|---|---|
-| `7zip.7zip` | 7-Zip | `7zFM`, `7zG` |
-| `Google.Chrome` | Google Chrome | `chrome` |
-| `Mozilla.Firefox` | Mozilla Firefox | `firefox` |
-| `Mozilla.Firefox.de` | Mozilla Firefox | `firefox` |
+The optional `ui` object accepts only Boolean `progress` and `success` values. Both default to `true` when the object or an individual value is omitted.
 
-A structurally invalid catalog stops the WAU cycle. An invalid individual entry is skipped without falling back to native WAU for that package. See [`catalog/campaign.example.json`](catalog/campaign.example.json) for the immutable campaign payload created during handoff.
+| UI key | Default | Purpose |
+|---|---:|---|
+| `progress` | `true` | Show progress during silent-path and post-Welcome upgrades |
+| `success` | `true` | Show the completion prompt after a successful upgrade |
+
+Welcome, deferral, deadline, restart, and process handling remain process-driven and are not affected by these settings. Unknown UI keys, non-Boolean values, and non-object `ui` values make only the affected catalog entry invalid.
+
+| Winget ID | Display name | Processes | UI settings |
+|---|---|---|---|
+| `7zip.7zip` | 7-Zip | `7zFM`, `7zG` | defaults |
+| `Google.Chrome` | Google Chrome | `chrome` | explicit defaults |
+| `Mozilla.Firefox` | Mozilla Firefox | `firefox` | defaults |
+| `Mozilla.Firefox.de` | Mozilla Firefox | `firefox` | defaults |
+
+A structurally invalid catalog stops the WAU cycle. An invalid individual entry is skipped without falling back to native WAU for that package. See [`catalog/campaign.example.json`](catalog/campaign.example.json) for the immutable campaign payload created during handoff, including validated UI settings when present.
 
 ## Configuration
 
-Bridge policy is defined in [`template/App/WauBridge.Config.ps1`](template/App/WauBridge.Config.ps1). Campaign JSON carries package identity, target version, and process names; it does not override global policy.
+Bridge policy is defined in [`template/App/WauBridge.Config.ps1`](template/App/WauBridge.Config.ps1). Campaign JSON carries package identity, target version, process names, and validated per-application progress and success settings. Retry, restart, localization, and all remaining policy stay global.
 
 ### Retry policy
 
@@ -198,14 +212,16 @@ The first welcome dialog consumes the first usage-day slot. Later reminders are 
 
 | Setting | Default | Purpose |
 |---|---:|---|
-| `ShowProgressSilent` | `$true` | Show progress for a silent-path upgrade when one interactive user exists |
-| `ShowProgressInteractive` | `$true` | Show progress after the welcome dialog |
-| `ShowSuccess` | `$true` | Show a completion prompt after a successful upgrade |
+| `ShowProgressSilent` | `$true` | Runtime target for catalog `ui.progress` on the silent path |
+| `ShowProgressInteractive` | `$true` | Runtime target for the same `ui.progress` value after Welcome |
+| `ShowSuccess` | `$true` | Runtime target for catalog `ui.success` after a successful upgrade |
 | `ShowRestartPrompt` | `$true` | Show a restart prompt for Winget reboot exit codes |
 | `RestartPromptNoCountdown` | `$false` | Disable the restart countdown |
 | `RestartCountdownSeconds` | `1800` | Restart countdown duration |
 | `RestartCountdownNoHideSeconds` | `300` | Time for which the restart countdown remains visible |
 | `CloseCountdownSeconds` | `300` | Forced close-application countdown after the deadline |
+
+The campaign importer sets the first three fields from the catalog values or their `true` defaults on every run. The existing PSADT lifecycle continues to consume these flags directly.
 
 ### Localization and PSADT
 
@@ -235,7 +251,7 @@ Additional safeguards include:
 - Canonical path and containment validation before recursive staging cleanup
 - Exact scheduled-task action, principal, description, and trigger validation
 - Exact desktop-shortcut target and argument validation
-- Fail-closed catalog and process-name validation
+- Fail-closed catalog, process-name, and per-application UI validation
 - Installed-version verification after Winget reports success
 
 ## Concurrency
