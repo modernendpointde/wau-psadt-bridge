@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.1] - 2026-09-19
+
+### Changed
+
+- Split the PSADT template framework into focused components for foundation helpers, runtime context, campaigns, scheduling, and shortcuts. Commands, configuration, catalog and campaign schemas, resource paths, task names, exit codes, and runtime behavior are unchanged.
+- Reduced the WAU handoff script to catalog routing and handoff orchestration. Campaign contract and health evaluation moved to `WauPsadt.CampaignContract.ps1`, which the installer copies into WAU `functions\` and removes on uninstall.
+- Replaced template assertions that depended on file layout with behavioral tests for the component contracts.
+
 ## [0.2.0] - 2026-09-11
 
 ### Added
@@ -55,6 +63,7 @@ All notable changes to this project are documented in this file.
 - English and German user-interface message packs.
 - Initial catalog entries for 7-Zip, Google Chrome, Mozilla Firefox, and Mozilla Firefox (DE).
 
+[0.2.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/modernendpointde/wau-psadt-bridge/releases/tag/v0.1.0

@@ -280,12 +280,14 @@ function Install-WauPsadtBridgePayload {
     $templateRoot = Join-Path $script:RepoRoot 'template'
     $catalogSource = Join-Path $script:RepoRoot 'catalog\apps.json'
     $submitSource = Join-Path $script:RepoRoot 'wau\Submit-WauPsadtUpdate.ps1'
+    $contractSource = Join-Path $script:RepoRoot 'wau\WauPsadt.CampaignContract.ps1'
     $updateAppSource = Join-Path $script:RepoRoot 'wau\Update-App.ps1'
 
     foreach ($required in @(
             @{ Path = (Join-Path $templateRoot 'install.ps1'); Name = 'template/install.ps1' },
             @{ Path = $catalogSource; Name = 'catalog/apps.json' },
             @{ Path = $submitSource; Name = 'wau/Submit-WauPsadtUpdate.ps1' },
+            @{ Path = $contractSource; Name = 'wau/WauPsadt.CampaignContract.ps1' },
             @{ Path = $updateAppSource; Name = 'wau/Update-App.ps1' }
         )) {
         if (-not (Test-Path -LiteralPath $required.Path -PathType Leaf)) {
@@ -309,6 +311,7 @@ function Install-WauPsadtBridgePayload {
     $wauFunctions = Join-Path $wauRoot 'functions'
     $updateAppDest = Join-Path $wauFunctions 'Update-App.ps1'
     $submitDest = Join-Path $wauFunctions 'Submit-WauPsadtUpdate.ps1'
+    $contractDest = Join-Path $wauFunctions 'WauPsadt.CampaignContract.ps1'
     $backupDest = Join-Path $wauFunctions $script:UpdateAppBackupName
 
     Assert-WauUpdateAppCompatible -UpdateAppPath $updateAppDest -WauRoot $wauRoot
@@ -336,6 +339,7 @@ function Install-WauPsadtBridgePayload {
     Copy-Item -LiteralPath $catalogSource -Destination $script:CatalogInstallPath -Force
     Copy-BridgeTree -Source $templateRoot -Destination $script:GoldenInstallRoot
     Copy-Item -LiteralPath $submitSource -Destination $submitDest -Force
+    Copy-Item -LiteralPath $contractSource -Destination $contractDest -Force
     Copy-Item -LiteralPath $updateAppSource -Destination $updateAppDest -Force
 
     Install-BridgeDirectoryAcl -Path $script:CatalogInstallDir
@@ -348,6 +352,9 @@ function Install-WauPsadtBridgePayload {
     }
     if (-not (Test-Path -LiteralPath (Join-Path $script:GoldenInstallRoot 'install.ps1') -PathType Leaf)) {
         throw 'Installed template is missing install.ps1.'
+    }
+    if (-not (Test-Path -LiteralPath $contractDest -PathType Leaf)) {
+        throw 'Installed WAU functions are missing the bridge campaign contract.'
     }
 
     Save-BridgeInstallState -State @{
@@ -376,6 +383,7 @@ function Uninstall-WauPsadtBridgePayload {
         $wauFunctions = Join-Path $wauRoot 'functions'
         $updateAppDest = Join-Path $wauFunctions 'Update-App.ps1'
         $submitDest = Join-Path $wauFunctions 'Submit-WauPsadtUpdate.ps1'
+        $contractDest = Join-Path $wauFunctions 'WauPsadt.CampaignContract.ps1'
         $backupDest = if ($state -and $state.updateAppBackup) {
             [string]$state.updateAppBackup
         }
@@ -404,6 +412,10 @@ function Uninstall-WauPsadtBridgePayload {
         if (Test-Path -LiteralPath $submitDest -PathType Leaf) {
             Remove-Item -LiteralPath $submitDest -Force
             Write-BridgeInstallLog "Removed $submitDest"
+        }
+        if (Test-Path -LiteralPath $contractDest -PathType Leaf) {
+            Remove-Item -LiteralPath $contractDest -Force
+            Write-BridgeInstallLog "Removed $contractDest"
         }
     }
 

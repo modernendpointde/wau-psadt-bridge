@@ -279,6 +279,7 @@ The native 64-bit Program Files path is used even when the installer is launched
 | Path | Purpose |
 |---|---|
 | `C:\Program Files\Winget-AutoUpdate\functions\Submit-WauPsadtUpdate.ps1` | WAU-to-bridge handoff |
+| `C:\Program Files\Winget-AutoUpdate\functions\WauPsadt.CampaignContract.ps1` | Campaign contract and health evaluation used by the handoff |
 | `C:\Program Files\Winget-AutoUpdate\functions\Update-App.ps1` | Supported WAU function with the bridge handoff |
 | `C:\Program Files\WauPsadtBridge\bridge.catalog.json` | Installed application catalog |
 | `C:\Program Files\WauPsadtBridge\Template\` | Immutable golden PSADT template |

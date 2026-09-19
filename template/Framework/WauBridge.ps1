@@ -2,11 +2,15 @@
 $wauBridgeFrameworkRoot = $PSScriptRoot
 
 foreach ($wauBridgeFrameworkPart in @(
-    'WauBridge.Compatibility.ps1',
+    'WauBridge.Foundation.ps1',
     'WauBridge.Core.ps1',
-    'WauBridge.Validation.ps1',
     'WauBridge.Localization.ps1',
     'WauBridge.Deferral.ps1',
+    'WauBridge.Context.ps1',
+    'WauBridge.Shortcuts.ps1',
+    'WauBridge.Scheduling.ps1',
+    'WauBridge.Campaign.ps1',
+    'WauBridge.Validation.ps1',
     'WauBridge.Detection.ps1',
     'WauBridge.Actions.ps1',
     'WauBridge.CampaignJson.ps1'

@@ -40,8 +40,11 @@ PSADT files for an app.
 ## Framework map
 
 - `WauBridge.ps1` is the loader.
-- `WauBridge.Compatibility.ps1` owns staging, scheduled tasks, registry state,
-  shortcuts and cleanup.
+- `WauBridge.Foundation.ps1` owns logging, identity, safe paths, atomic writes and escaping.
+- `WauBridge.Context.ps1` owns native paths, resource identity and processes.
+- `WauBridge.Campaign.ps1` owns staging, registry state and cleanup.
+- `WauBridge.Scheduling.ps1` owns retry and cleanup task contracts.
+- `WauBridge.Shortcuts.ps1` owns the desktop shortcut contract and lifecycle.
 - `WauBridge.Core.ps1` defines paths, culture/timezone helpers and normalized
   action results.
 - `WauBridge.Validation.ps1` owns aggregate preflight.

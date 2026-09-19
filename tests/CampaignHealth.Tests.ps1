@@ -3,6 +3,7 @@ Set-StrictMode -Version 1
 
 . (Join-Path $PSScriptRoot 'Helpers.ps1')
 $repoRoot = Get-BridgeRepoRoot
+. (Join-Path $repoRoot 'wau/WauPsadt.CampaignContract.ps1')
 . (Join-Path $repoRoot 'wau/Submit-WauPsadtUpdate.ps1')
 
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('wau-health-' + [guid]::NewGuid().ToString('N'))

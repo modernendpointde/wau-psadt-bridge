@@ -20,7 +20,7 @@ pwsh -NoProfile -File ./tests/Run-Tests.ps1
 A successful run ends with:
 
 ```text
-All tests passed (7).
+All tests passed (8).
 ```
 
 The suite covers:
@@ -31,6 +31,7 @@ The suite covers:
 - Campaign health and ownership classification
 - Deferral schedule calculation
 - Campaign lifecycle and staging cleanup
+- Framework component contracts for paths, task ownership, shortcut ownership, and prompt accounting
 - Shared mutex and update serialization behavior
 
 The automated tests validate script contracts and isolated lifecycle behavior. They do not launch the PSAppDeployToolkit user interface, execute a real Winget upgrade, or create production scheduled tasks.
@@ -145,7 +146,7 @@ Restore the shipped catalog before continuing.
 Expected result:
 
 - The original supported WAU `Update-App.ps1` is restored.
-- Bridge-managed files are removed.
+- Bridge-managed files are removed, including the WAU handoff and campaign contract functions.
 - Non-empty campaign staging directories are preserved.
 - Empty staging parent directories are removed.
 - WAU scheduled tasks remain unchanged.

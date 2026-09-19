@@ -15,24 +15,6 @@ Assert-True ($invokeText -match "(?s)'InstalledNewerVersion'.*?Complete-WauBridg
 Assert-True ($invokeText -match "(?s)'InstalledSameVersion'.*?Test-WauBridgeSchedulePresent") 'same-version requires owned schedule'
 Assert-True ($invokeText -notmatch 'Show-ADTInstallationWelcome[\s\S]{0,200}InstalledSameVersion') 'no welcome before same-version return'
 
-$compatText = Get-Content -LiteralPath (Join-Path $templateRoot 'Framework/WauBridge.Compatibility.ps1') -Raw
-Assert-True ($compatText -match 'New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew') 'retry task IgnoreNew'
-Assert-True ($compatText -match 'An existing task collides with the retry task name and is not owned by this campaign') 'foreign retry task is not overwritten'
-Assert-True ($compatText -match 'An existing task collides with the cleanup task name and is not owned by this campaign') 'foreign cleanup task is not overwritten'
-Assert-True ($compatText -match 'function Get-WauBridgeTaskPath') 'task path is a fixed product folder'
-Assert-True ($compatText -match 'function Get-WauBridgeNativeProgramFiles') 'stage root uses native Program Files'
-Assert-True ($compatText -match 'ProgramW6432') 'stage root prefers ProgramW6432 on 64-bit Windows'
-Assert-True ($compatText -match 'Update_\{0\}_\{1\}') 'retry task name is Update_id_version'
-Assert-True ($compatText -match 'Cleanup_\{0\}_\{1\}') 'cleanup task name is Cleanup_id_version'
-Assert-True ($compatText -match 'function Grant-WauBridgeUpdateTaskRunAccess') 'retry task grants Authenticated Users run access'
-Assert-True ($compatText -notmatch 'FreshInstall') 'no FreshInstall mapping'
-Assert-True ($compatText -match 'function Get-WauBridgeManualTaskStartArguments') 'shortcut starts the owned retry task'
-Assert-True ($compatText -notmatch 'Get-WauBridgeEffectiveTaskPath') 'no config TaskPath override'
-
-Assert-True ($compatText -notmatch 'function Get-WauBridgeActiveCampaignsForPackageId') 'unused active-campaign reader removed'
-Assert-True ($compatText -notmatch 'function Test-WauBridgeActiveCampaignForPackageId') 'no unused active-campaign wrapper'
-Assert-True ($compatText -match "(?s)function Add-WauBridgePromptShown[\s\S]*?-State 'Deferred'") 'prompt shown sets Deferred'
-
 $stageTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('wau-stage-cleanup-' + [guid]::NewGuid().ToString('N'))
 $stageBase = Join-Path $stageTestRoot 'Stage'
 $ownedStage = Join-Path $stageBase 'Google.Chrome/140.0'

@@ -158,13 +158,11 @@ Assert-True ($invokeText -match "ValidateSet\('Bootstrap', 'RetryTask'\)") 'invo
 Assert-True ($invokeText -match "AppScriptVersion\s+=\s+\[version\]'0\.2\.0'") 'AppScriptVersion is 0.2.0'
 Assert-True ($invokeText -match "AppScriptDate\s+=\s+'2026-09-07'") 'AppScriptDate is 2026-09-07'
 Assert-True ($invokeText -notmatch "'Shortcut'") 'no Shortcut invocation source'
-$compatShortcutText = Get-Content -LiteralPath (Join-Path $templateRoot 'Framework/WauBridge.Compatibility.ps1') -Raw
-Assert-True ($compatShortcutText -match 'Start-ScheduledTask -TaskPath') 'shortcut arguments start the scheduled task'
-Assert-True ($compatShortcutText -match 'function Grant-WauBridgeUpdateTaskRunAccess') 'users may run the retry task'
-Assert-True ($compatShortcutText -notmatch 'StartTaskNow') 'Register-WauBridgeSchedule has no StartTaskNow'
-Assert-True ($compatShortcutText -notmatch 'function Test-WauBridgeActiveCampaignForPackageId') 'no unused active-campaign wrapper'
-Assert-True ($compatShortcutText -match "Join-Path 'Stage'") 'deferred campaigns still stage under Stage'
-Assert-True ($compatShortcutText -notmatch "Join-Path 'Work'") 'Stage path is not the Work root'
+$frameworkText = (Get-ChildItem -LiteralPath (Join-Path $templateRoot 'Framework') -Filter '*.ps1' -File | Sort-Object Name | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join [Environment]::NewLine
+Assert-True ($frameworkText -match 'function Grant-WauBridgeUpdateTaskRunAccess') 'users may run the retry task'
+Assert-True ($frameworkText -notmatch 'StartTaskNow') 'Register-WauBridgeSchedule has no StartTaskNow'
+Assert-True ($frameworkText -notmatch 'function Test-WauBridgeActiveCampaignForPackageId') 'no unused active-campaign wrapper'
+Assert-True ($frameworkText -notmatch "Join-Path 'Work'") 'Stage path is not the Work root'
 Assert-True (-not (Test-Path -LiteralPath (Join-Path $templateRoot 'Invoke-AppDeployToolkit.exe') -PathType Leaf)) 'no unused outer PSADT launcher'
 Assert-True ($invokeText -notmatch "'Direct'") 'no Direct invocation source'
 Assert-True ($invokeText -notmatch '\$bridgeMode') 'no bridgeMode switch'

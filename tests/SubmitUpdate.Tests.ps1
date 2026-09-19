@@ -7,6 +7,7 @@ $wauFunctions = Join-Path $repoRoot 'wau'
 $catalogSource = Join-Path $repoRoot 'catalog/apps.json'
 
 $script:WauPsadtTestLog = @()
+. (Join-Path $wauFunctions 'WauPsadt.CampaignContract.ps1')
 . (Join-Path $wauFunctions 'Submit-WauPsadtUpdate.ps1')
 $script:WauPsadtForceSystemContext = $true
 

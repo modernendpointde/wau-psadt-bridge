@@ -33,16 +33,20 @@ Native Windows execution must be validated on a Windows test system.
 ├── Assets/                     packaged icons and banner
 ├── Config/                     PSADT UI timeout and company name
 ├── Framework/
-│   ├── WauBridge.ps1      ordered framework loader
-│   ├── WauBridge.Compatibility.ps1  Windows staging, tasks, registry, shortcuts
-│   ├── WauBridge.Core.ps1           result, path, culture, and time helpers
-│   ├── WauBridge.Validation.ps1     aggregate preflight
-│   ├── WauBridge.Localization.ps1   culture-pack resolution and rendering
-│   ├── WauBridge.Deferral.ps1       deadline and reminder model
-│   ├── WauBridge.Detection.ps1      evidence and operation model
-│   ├── WauBridge.Actions.ps1        result and progress contracts
-│   ├── WauBridge.Winget.ps1         winget export / upgrade
-│   └── WauBridge.CampaignJson.ps1   required WauBridge.Campaign.json overlay
+│   ├── WauBridge.ps1               ordered framework loader
+│   ├── WauBridge.Foundation.ps1    logging, identity, safe paths, atomic writes
+│   ├── WauBridge.Core.ps1          result, path, culture, and time helpers
+│   ├── WauBridge.Localization.ps1  culture-pack resolution and rendering
+│   ├── WauBridge.Deferral.ps1      deadline and reminder model
+│   ├── WauBridge.Context.ps1       native paths, resource identity, processes
+│   ├── WauBridge.Shortcuts.ps1     desktop shortcut contract and lifecycle
+│   ├── WauBridge.Scheduling.ps1    retry and cleanup task contracts
+│   ├── WauBridge.Campaign.ps1      staging, registry state, and cleanup
+│   ├── WauBridge.Validation.ps1    aggregate preflight
+│   ├── WauBridge.Detection.ps1     evidence and operation model
+│   ├── WauBridge.Actions.ps1       result and progress contracts
+│   ├── WauBridge.Winget.ps1        winget export / upgrade
+│   └── WauBridge.CampaignJson.ps1  required WauBridge.Campaign.json overlay
 ├── Messages/                   message contract and culture packs
 ├── PSAppDeployToolkit/         unmodified PSADT module
 ├── Invoke-AppDeployToolkit.ps1 install/upgrade lifecycle
@@ -84,14 +88,20 @@ The bootstrap scripts return the exit code of the started PowerShell process unc
 
 `WauBridge.ps1` loads:
 
-1. `WauBridge.Compatibility.ps1`
+1. `WauBridge.Foundation.ps1`
 2. `WauBridge.Core.ps1`
-3. `WauBridge.Validation.ps1`
-4. `WauBridge.Localization.ps1`
-5. `WauBridge.Deferral.ps1`
-6. `WauBridge.Detection.ps1`
-7. `WauBridge.Actions.ps1`
-8. `WauBridge.CampaignJson.ps1`
+3. `WauBridge.Localization.ps1`
+4. `WauBridge.Deferral.ps1`
+5. `WauBridge.Context.ps1`
+6. `WauBridge.Shortcuts.ps1`
+7. `WauBridge.Scheduling.ps1`
+8. `WauBridge.Campaign.ps1`
+9. `WauBridge.Validation.ps1`
+10. `WauBridge.Detection.ps1`
+11. `WauBridge.Actions.ps1`
+12. `WauBridge.CampaignJson.ps1`
+
+Function calls resolve at invocation, so any order that loads a component before its functions are called would run; this recorded order is a real dependency order with no cycle. Foundation depends on nothing. Core, Deferral, Shortcuts, Detection, Actions, and CampaignJson build on Foundation. Localization adds Core, Context adds Localization, Scheduling adds Shortcuts, Campaign adds Context, Deferral, Scheduling, and Shortcuts, and Validation and Winget close the set. Localization and CampaignJson also initialize script-scoped values while loading (`$script:WauBridgeLocalizationResource` and `$script:WauBridgeMutexName`); the remaining components only define functions.
 
 `WauBridge.Winget.ps1` loads after the framework because `WauBridge.Detect.ps1` calls its functions at runtime.
 
@@ -101,7 +111,11 @@ flowchart TD
     Config["WauBridge.Config.ps1"] --> Entry
     Detect["WauBridge.Detect.ps1"] --> Entry
     Loader["WauBridge.ps1"] --> Entry
-    Compat["Compatibility"] --> Loader
+    Foundation["Foundation"] --> Loader
+    Context["Context"] --> Loader
+    Campaign["Campaign"] --> Loader
+    Scheduling["Scheduling"] --> Loader
+    Shortcuts["Shortcuts"] --> Loader
     Core["Core"] --> Loader
     Validation["Validation"] --> Loader
     Localization["Localization"] --> Loader
@@ -487,7 +501,7 @@ Before replacing active packages, map existing campaign resources by CampaignId,
 |---|---|
 | Policy fields | `App/WauBridge.Config.ps1` |
 | PSADT dialog timeout and company name | `Config/config.psd1` |
-| Configuration value sets and required fields | `Framework/WauBridge.Compatibility.ps1` and `Framework/WauBridge.Validation.ps1` |
+| Configuration value sets and required fields | `Framework/WauBridge.Foundation.ps1` and `Framework/WauBridge.Validation.ps1` |
 | Load order | `Invoke-AppDeployToolkit.ps1` and `Framework/WauBridge.ps1` |
 | Lifecycle | `Invoke-AppDeployToolkit.ps1` |
 | Detection adapters | `App/WauBridge.Detect.ps1` |
@@ -496,7 +510,10 @@ Before replacing active packages, map existing campaign resources by CampaignId,
 | Result contract | `Framework/WauBridge.Core.ps1` and `Framework/WauBridge.Actions.ps1` |
 | Deadline and reminder | `Framework/WauBridge.Deferral.ps1` |
 | Localization | `Framework/WauBridge.Localization.ps1`, `Messages/message-contract.json` |
-| Windows resources, state, and cleanup | `Framework/WauBridge.Compatibility.ps1` |
+| Native paths and resource identity | `Framework/WauBridge.Context.ps1` |
+| Staging, registry state, and cleanup | `Framework/WauBridge.Campaign.ps1` |
+| Task Scheduler contracts | `Framework/WauBridge.Scheduling.ps1` |
+| Desktop shortcut contract | `Framework/WauBridge.Shortcuts.ps1` |
 | Winget | `Framework/WauBridge.Winget.ps1` |
 | WauBridge.Campaign.json overlay | `Framework/WauBridge.CampaignJson.ps1` |
 
