@@ -184,6 +184,33 @@ try {
     Assert-True ($frameworkText -match 'An existing task collides with the cleanup task name and is not owned by this campaign') 'a foreign cleanup task is not overwritten'
     Assert-True ($frameworkText -match 'function Grant-WauBridgeUpdateTaskRunAccess') 'the retry task grants Authenticated Users run access'
 
+    # A task that is already gone is a normal cleanup outcome. It has to be recognised from the
+    # error identity, because the ScheduledTasks cmdlets localize their message text.
+    function New-TestTaskErrorRecord {
+        param([Parameter(Mandatory)][System.Management.Automation.ErrorCategory]$Category)
+        $exception = [System.Exception]::new('classification test')
+        return [System.Management.Automation.ErrorRecord]::new($exception, 'TestError', $Category, $null)
+    }
+    Assert-True (Test-WauBridgeTaskMissingError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::ObjectNotFound))) 'an object-not-found error means the task is gone'
+    Assert-True (-not (Test-WauBridgeTaskMissingError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::PermissionDenied)))) 'a permission failure is not a missing task'
+    Assert-True (-not (Test-WauBridgeTaskMissingError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::NotSpecified)))) 'an unspecified failure is not a missing task'
+    $missingCommand = [System.Management.Automation.CommandNotFoundException]::new('Get-ScheduledTask')
+    $missingCommandRecord = [System.Management.Automation.ErrorRecord]::new($missingCommand, 'CommandNotFound', [System.Management.Automation.ErrorCategory]::ObjectNotFound, $null)
+    Assert-True (-not (Test-WauBridgeTaskMissingError -ErrorRecord $missingCommandRecord)) 'a missing command is not a missing task'
+
+    # The cleanup path must stay quiet for a task that is already gone and stay visible for a real
+    # failure. The logger is replaced so the decision itself is observed.
+    $script:recordedCleanupLog = @()
+    function Write-WauBridgeLog {
+        param([Parameter(Mandatory)][string]$Message, [ValidateSet(1, 2, 3)][int]$Severity = 1)
+        $script:recordedCleanupLog += $Message
+    }
+    Write-WauBridgeTaskCleanupFailure -TaskName 'Update_Probe_1.0' -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::ObjectNotFound))
+    Assert-True ($script:recordedCleanupLog.Count -eq 0) 'a task that is already gone produces no cleanup warning'
+    Write-WauBridgeTaskCleanupFailure -TaskName 'Update_Probe_1.0' -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::PermissionDenied))
+    Assert-True ($script:recordedCleanupLog.Count -eq 1) 'a real cleanup failure is reported once'
+    Assert-True ($script:recordedCleanupLog[0] -match 'Update_Probe_1\.0') 'the cleanup warning names the task'
+
     Assert-True ($frameworkText -notmatch 'FreshInstall') 'no FreshInstall mapping'
     Assert-True ($frameworkText -notmatch 'Get-WauBridgeEffectiveTaskPath') 'no config TaskPath override'
     Assert-True ($frameworkText -notmatch 'function Get-WauBridgeActiveCampaignsForPackageId') 'unused active-campaign reader removed'

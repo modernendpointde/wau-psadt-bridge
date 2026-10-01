@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.1] - 2026-10-01
+
+### Fixed
+
+- The template cleanup classifies an error from inspecting or removing a scheduled task by its identity instead of by localized message text. A retry or cleanup task that is already gone is recognised independently of the Windows display language.
+
 ## [0.3.0] - 2026-10-01
 
 ### Added
@@ -81,6 +87,7 @@ All notable changes to this project are documented in this file.
 - English and German user-interface message packs.
 - Initial catalog entries for 7-Zip, Google Chrome, Mozilla Firefox, and Mozilla Firefox (DE).
 
+[0.3.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.1...v0.2.0

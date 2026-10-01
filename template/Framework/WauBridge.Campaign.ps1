@@ -437,6 +437,28 @@ function Remove-WauBridgeEmptyStageParents {
     }
 }
 
+function Test-WauBridgeTaskMissingError {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord)
+
+    # The ScheduledTasks cmdlets localize their message text, so classify the error by its
+    # identity. A missing command also reports object-not-found and is not a missing task.
+    if ($ErrorRecord.Exception -is [System.Management.Automation.CommandNotFoundException]) { return $false }
+    return ($ErrorRecord.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound)
+}
+
+function Write-WauBridgeTaskCleanupFailure {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    # A task that is already gone needs no entry. Every other failure stays visible.
+    if (Test-WauBridgeTaskMissingError -ErrorRecord $ErrorRecord) { return }
+    Write-WauBridgeLog -Message ("Task [{0}] could not be inspected or removed: {1}" -f $TaskName, $ErrorRecord.Exception.Message) -Severity 2
+}
+
 function Remove-WauBridgeSchedule {
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Context,[switch]$RemoveStageRoot)
@@ -462,9 +484,7 @@ function Remove-WauBridgeSchedule {
             }
         }
         catch [Microsoft.Management.Infrastructure.CimException] {
-            if ($_.Exception.Message -notmatch 'cannot find|nicht gefunden') {
-                Write-WauBridgeLog -Message ("Task [{0}] could not be inspected or removed: {1}" -f $taskDefinition.Name, $_.Exception.Message) -Severity 2
-            }
+            Write-WauBridgeTaskCleanupFailure -TaskName $taskDefinition.Name -ErrorRecord $_
         }
         catch {
             Write-WauBridgeLog -Message ("Task [{0}] could not be inspected or removed: {1}" -f $taskDefinition.Name, $_.Exception.Message) -Severity 2

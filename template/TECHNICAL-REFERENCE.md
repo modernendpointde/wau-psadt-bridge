@@ -347,6 +347,8 @@ The canonical schedule API is:
 
 Cleanup calls `Remove-WauBridgeSchedule` directly.
 
+`Remove-WauBridgeSchedule` treats a task that is not registered as already removed. A CIM error from inspecting or removing a task is classified by its identity (`ObjectNotFound`, excluding a missing command) rather than by localized message text, so the result does not depend on the Windows display language. Every other failure is logged.
+
 ### 14.1 Staging
 
 `Stage-WauBridgePackage` copies the package with Robocopy `/E`. Exit codes 0 through 7 are success; higher values abort. `/MIR` is unused. After a successful copy, `.waubridge-owner.json` is written with schema, ResourceType, CampaignId, PackageId, TargetVersion, and the canonical StageRoot.
