@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-10-01
+
+### Added
+
+- Read-only diagnostics that inspect an installation without repairing, starting, or changing it:
+  - `diagnostics/Test-WauPsadtBridgeCatalog.ps1` validates a catalog file with the runtime rules and reports the effective values per entry. It needs no installed bridge.
+  - `diagnostics/Get-WauPsadtBridgeStatus.ps1` reports campaign identity, target version, state, deadline, prompt count, next attempt, and last result, and keeps stored values apart from live observations.
+  - `diagnostics/Test-WauPsadtBridgeHealth.ps1` checks bridge installation, template entry points, catalog, WAU handoff and backup, WAU version, Winget availability, and campaign health, and reports every check as `Pass`, `Fail`, or `Unknown`.
+- Structured report objects through `-PassThru` and `ConvertTo-Json` for all three entry points.
+
+### Changed
+
+- Moved the read-only WAU compatibility rules (supported version, stock-file hash, and the WAU helper functions) into `wau/WauPsadt.BridgeContract.ps1`, shared by the installer and the diagnostics. Installed behavior is unchanged.
+
+### Fixed
+
+- A scheduled task that cannot be read is now reported as unverified instead of absent, so a failed task query no longer turns a healthy campaign into a recoverable orphan whose resources are removed. Only a structured object-not-found result counts as an absent task.
+
 ## [0.2.1] - 2026-09-19
 
 ### Changed
@@ -63,6 +81,7 @@ All notable changes to this project are documented in this file.
 - English and German user-interface message packs.
 - Initial catalog entries for 7-Zip, Google Chrome, Mozilla Firefox, and Mozilla Firefox (DE).
 
+[0.3.0]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/modernendpointde/wau-psadt-bridge/compare/v0.1.0...v0.1.1

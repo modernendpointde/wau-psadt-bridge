@@ -210,10 +210,46 @@ function Get-WauPsadtCampaignHealth {
     if ($Snapshot.TaskExists -and -not $Snapshot.TaskOwned) { return [pscustomobject]@{ Status = 'BlockedForeign'; Reason = 'retry task does not match the campaign contract' } }
     if ($Snapshot.CleanupTaskExists -and -not $Snapshot.CleanupTaskOwned) { return [pscustomobject]@{ Status = 'BlockedForeign'; Reason = 'cleanup task does not match the campaign contract' } }
     if ($Snapshot.ShortcutExists -and -not $Snapshot.ShortcutOwned) { return [pscustomobject]@{ Status = 'BlockedForeign'; Reason = 'desktop shortcut ownership cannot be proven' } }
+    # An unreadable task is not proof that it is missing. Preserve the campaign instead of
+    # treating it as an orphan, which would remove its resources.
+    if ($Snapshot.TaskObserved -ne $true -or $Snapshot.CleanupTaskObserved -ne $true) {
+        return [pscustomobject]@{ Status = 'BlockedUnverified'; Reason = 'the retry or cleanup task could not be read' }
+    }
     if ($Snapshot.StageOwned -and $Snapshot.StateOwned -and $Snapshot.TaskHealthy -and -not $Snapshot.CleanupTaskExists) {
         return [pscustomobject]@{ Status = 'Healthy'; Reason = 'registry, StageRoot, schedule state, and retry task match' }
     }
     return [pscustomobject]@{ Status = 'RecoverableOrphan'; Reason = 'one or more owned campaign resources are missing or incomplete' }
+}
+
+function Test-WauPsadtTaskNotFoundError {
+    param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord)
+
+    # Structured evidence only. Matching the message text would be locale-dependent and could turn
+    # an unrelated query failure into an observed absence, which is what this guard exists to stop.
+    # A missing command also reports ObjectNotFound, and that is not an absent task.
+    if ($ErrorRecord.Exception -is [System.Management.Automation.CommandNotFoundException]) { return $false }
+    return ($ErrorRecord.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound)
+}
+
+function Get-WauPsadtScheduledTaskObservation {
+    param([Parameter(Mandatory)][string]$TaskPath, [Parameter(Mandatory)][string]$TaskName)
+
+    # A failed query must not look like an absent task. The runtime removes the resources of a
+    # recoverable orphan, so absence has to be an observation rather than a fallback.
+    if (-not (Get-Command -Name Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Present = $null; Task = $null }
+    }
+
+    try {
+        $task = Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction Stop
+        return [pscustomobject]@{ Present = ($null -ne $task); Task = $task }
+    }
+    catch {
+        if (Test-WauPsadtTaskNotFoundError -ErrorRecord $_) {
+            return [pscustomobject]@{ Present = $false; Task = $null }
+        }
+        return [pscustomobject]@{ Present = $null; Task = $null }
+    }
 }
 
 function Get-WauPsadtCampaignSnapshot {
@@ -233,12 +269,17 @@ function Get-WauPsadtCampaignSnapshot {
     }
     $stateOwned = $state -and (Test-WauPsadtScheduleStateContract -State $state -Registry $Registry -Contract $Contract)
 
-    $task = Get-ScheduledTask -TaskPath $Contract.TaskPath -TaskName $Contract.TaskName -ErrorAction SilentlyContinue
-    $taskExists = $null -ne $task
+    $retryObservation = Get-WauPsadtScheduledTaskObservation -TaskPath $Contract.TaskPath -TaskName $Contract.TaskName
+    $task = $retryObservation.Task
+    $taskObserved = $null -ne $retryObservation.Present
+    $taskExists = $retryObservation.Present -eq $true
     $taskOwned = $taskExists -and (Test-WauPsadtScheduledTaskContract -Task $task -Contract $Contract)
     $taskHealthy = $taskExists -and (Test-WauPsadtScheduledTaskContract -Task $task -Contract $Contract -RequireTriggers)
-    $cleanupTask = Get-ScheduledTask -TaskPath $Contract.TaskPath -TaskName $Contract.CleanupTaskName -ErrorAction SilentlyContinue
-    $cleanupTaskExists = $null -ne $cleanupTask
+
+    $cleanupObservation = Get-WauPsadtScheduledTaskObservation -TaskPath $Contract.TaskPath -TaskName $Contract.CleanupTaskName
+    $cleanupTask = $cleanupObservation.Task
+    $cleanupTaskObserved = $null -ne $cleanupObservation.Present
+    $cleanupTaskExists = $cleanupObservation.Present -eq $true
     $cleanupTaskOwned = $cleanupTaskExists -and (Test-WauPsadtScheduledTaskContract -Task $cleanupTask -Contract $Contract -Cleanup)
 
     $shortcutExists = -not [string]::IsNullOrWhiteSpace($Contract.ShortcutPath) -and (Test-Path -LiteralPath $Contract.ShortcutPath -PathType Leaf)
@@ -258,9 +299,11 @@ function Get-WauPsadtCampaignSnapshot {
         StateExists         = $stateExists
         StateOwned          = [bool]$stateOwned
         TaskExists          = $taskExists
+        TaskObserved        = [bool]$taskObserved
         TaskOwned           = [bool]$taskOwned
         TaskHealthy         = [bool]$taskHealthy
         CleanupTaskExists   = $cleanupTaskExists
+        CleanupTaskObserved = [bool]$cleanupTaskObserved
         CleanupTaskOwned    = [bool]$cleanupTaskOwned
         ShortcutExists      = $shortcutExists
         ShortcutOwned       = [bool]$shortcutOwned
@@ -318,7 +361,7 @@ function Test-WauPsadtActiveCampaign {
                 Write-ToLog "WAU-PSADT Bridge found a healthy active campaign [$($contract.CampaignId)] for [$PackageId]." "Yellow"
                 return $true
             }
-            if ($health.Status -eq 'BlockedForeign') {
+            if ($health.Status -ne 'RecoverableOrphan') {
                 Write-ToLog "WAU-PSADT Bridge cannot reconcile campaign [$($contract.CampaignId)] for [$PackageId]: $($health.Reason). No resource was removed." "Red"
                 return $true
             }

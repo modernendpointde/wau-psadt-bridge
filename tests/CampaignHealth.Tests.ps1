@@ -73,9 +73,11 @@ function New-TestSnapshot {
         [bool]$StateExists = $true,
         [bool]$StateOwned = $true,
         [bool]$TaskExists = $true,
+        [bool]$TaskObserved = $true,
         [bool]$TaskOwned = $true,
         [bool]$TaskHealthy = $true,
         [bool]$CleanupTaskExists = $false,
+        [bool]$CleanupTaskObserved = $true,
         [bool]$CleanupTaskOwned = $false,
         [bool]$ShortcutExists = $false,
         [bool]$ShortcutOwned = $false
@@ -87,9 +89,11 @@ function New-TestSnapshot {
         StateExists = $StateExists
         StateOwned = $StateOwned
         TaskExists = $TaskExists
+        TaskObserved = $TaskObserved
         TaskOwned = $TaskOwned
         TaskHealthy = $TaskHealthy
         CleanupTaskExists = $CleanupTaskExists
+        CleanupTaskObserved = $CleanupTaskObserved
         CleanupTaskOwned = $CleanupTaskOwned
         ShortcutExists = $ShortcutExists
         ShortcutOwned = $ShortcutOwned
@@ -105,6 +109,33 @@ Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -StateOwned
 Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -TaskOwned $false -TaskHealthy $false)).Status -eq 'BlockedForeign') 'foreign retry task collision is blocked'
 Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -ShortcutExists $true -ShortcutOwned $false)).Status -eq 'BlockedForeign') 'foreign shortcut collision is blocked'
 Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -RegistryOwned $false)).Status -eq 'BlockedForeign') 'foreign registry contract is blocked'
+Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -TaskObserved $false)).Status -eq 'BlockedUnverified') 'an unreadable retry task blocks reconciliation'
+Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -CleanupTaskObserved $false)).Status -eq 'BlockedUnverified') 'an unreadable cleanup task blocks reconciliation'
+Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -TaskObserved $false)).Reason -match 'could not be read') 'the unverified reason names the read failure'
+$unobservedOrphan = New-TestSnapshot -StageExists $false -StageOwned $false -StateExists $false -StateOwned $false -TaskExists $false -TaskOwned $false -TaskHealthy $false -TaskObserved $false
+Assert-True ((Get-WauPsadtCampaignHealth -Snapshot $unobservedOrphan).Status -eq 'BlockedUnverified') 'an unreadable task blocks the orphan verdict that would remove the campaign'
+Assert-True ((Get-WauPsadtCampaignHealth -Snapshot (New-TestSnapshot -StageExists $false -StageOwned $false -StateExists $false -StateOwned $false -TaskExists $false -TaskOwned $false -TaskHealthy $false)).Status -eq 'RecoverableOrphan') 'an observed absent task still yields a recoverable orphan'
+
+$observation = Get-WauPsadtScheduledTaskObservation -TaskPath 'WauPsadtBridge' -TaskName 'Does_Not_Exist'
+Assert-True ($null -ne $observation) 'the task observation always returns a result'
+if (-not (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+    Assert-True ($null -eq $observation.Present) 'an unavailable Task Scheduler yields an unknown presence'
+}
+
+# Only structured object-not-found evidence counts as an absent task
+function New-TestTaskErrorRecord {
+    param([Parameter(Mandatory)][System.Management.Automation.ErrorCategory]$Category)
+    $exception = [System.Exception]::new('classification test')
+    return [System.Management.Automation.ErrorRecord]::new($exception, 'TestError', $Category, $null)
+}
+Assert-True (Test-WauPsadtTaskNotFoundError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::ObjectNotFound))) 'an object-not-found error means the task is absent'
+Assert-True (-not (Test-WauPsadtTaskNotFoundError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::PermissionDenied)))) 'a permission failure is not an absent task'
+Assert-True (-not (Test-WauPsadtTaskNotFoundError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::NotSpecified)))) 'an unspecified failure is not an absent task'
+Assert-True (-not (Test-WauPsadtTaskNotFoundError -ErrorRecord (New-TestTaskErrorRecord -Category ([System.Management.Automation.ErrorCategory]::OperationStopped)))) 'a stopped operation is not an absent task'
+# A missing command also reports object-not-found, so it must stay a distinct check
+$commandMissing = [System.Management.Automation.CommandNotFoundException]::new('Get-ScheduledTask')
+$commandMissingRecord = [System.Management.Automation.ErrorRecord]::new($commandMissing, 'CommandNotFound', [System.Management.Automation.ErrorCategory]::ObjectNotFound, $null)
+Assert-True (-not (Test-WauPsadtTaskNotFoundError -ErrorRecord $commandMissingRecord)) 'a missing command is not an absent task'
 
 Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
 Write-Output 'CampaignHealth.Tests: OK'

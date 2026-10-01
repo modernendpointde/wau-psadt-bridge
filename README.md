@@ -11,7 +11,7 @@
 ![WAU](https://img.shields.io/badge/WAU-2.12.0-5C2D91)
 ![PSADT](https://img.shields.io/badge/PSADT-4.1.8-2E7D32)
 
-[Overview](#overview) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Testing](#testing) · [Documentation](#documentation)
+[Overview](#overview) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Diagnostics](#diagnostics) · [Testing](#testing) · [Documentation](#documentation)
 
 </div>
 
@@ -45,6 +45,7 @@ WAU continues to decide which applications are eligible for an update. Applicati
 - Ownership-aware campaign recovery that preserves foreign or ambiguous resources
 - English and German user-interface message packs
 - Safe installation, reinstallation, and removal of the bridge integration
+- Read-only catalog validation, campaign status, and installation health checks
 
 ## Quick start
 
@@ -259,6 +260,99 @@ Additional safeguards include:
 All SYSTEM update paths share `Global\WauPsadtBridge.Update` with non-blocking acquisition. Only one bridge UI or Winget operation can run at a time.
 
 If another catalog application's welcome dialog holds the mutex, a later package in the same WAU cycle exits with code `1618`. That package remains on its installed version until a later WAU cycle or its own existing reminder task. The bridge does not maintain an in-cycle queue.
+
+## Diagnostics
+
+Three read-only scripts answer what is installed, what is waiting, and why it is blocked. They inspect the machine and do not repair, start, or change anything.
+
+Each script supports `-PassThru`, which emits the structured report object. The JSON examples run the script and `ConvertTo-Json` in one PowerShell process so the object, not formatted text, reaches the pipeline.
+
+### Catalog validation
+
+[`diagnostics/Test-WauPsadtBridgeCatalog.ps1`](diagnostics/Test-WauPsadtBridgeCatalog.ps1) validates a catalog file without an installed bridge. It applies the same rules as the WAU runtime and reports the effective values per entry.
+
+```powershell
+pwsh -NoProfile -File ./diagnostics/Test-WauPsadtBridgeCatalog.ps1
+pwsh -NoProfile -File ./diagnostics/Test-WauPsadtBridgeCatalog.ps1 -Path ./catalog/apps.json
+pwsh -NoProfile -Command "./diagnostics/Test-WauPsadtBridgeCatalog.ps1 -Path ./catalog/apps.json -PassThru | ConvertTo-Json -Depth 5"
+```
+
+Without `-Path` the shipped `catalog/apps.json` is validated. The report lists every entry with its processes and its effective `ui.progress` and `ui.success` values, or the reason the entry is invalid.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | The catalog is valid. |
+| `1` | The file is missing, unreadable, or structurally invalid. The WAU cycle stops for this condition. |
+| `2` | The structure is valid, but at least one entry is invalid. That entry is skipped and does not fall back to native WAU. |
+
+### Campaign status
+
+[`diagnostics/Get-WauPsadtBridgeStatus.ps1`](diagnostics/Get-WauPsadtBridgeStatus.ps1) reports the campaigns on the machine and keeps stored values apart from live observations.
+
+```powershell
+pwsh -NoProfile -File ./diagnostics/Get-WauPsadtBridgeStatus.ps1
+pwsh -NoProfile -File ./diagnostics/Get-WauPsadtBridgeStatus.ps1 -PackageId Google.Chrome
+pwsh -NoProfile -Command "./diagnostics/Get-WauPsadtBridgeStatus.ps1 -PassThru | ConvertTo-Json -Depth 6"
+```
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `-PackageId` | none | Report one exact Winget package ID using the same comparison as the runtime. |
+| `-RegistryBasePath` | `HKLM:\SOFTWARE\WauPsadtBridge\Campaigns` | Campaign registry location to read. |
+| `-InstallRoot` | the native Program Files bridge root | Installed bridge location, used for staged campaign resources and the template version. |
+| `-PassThru` | off | Emit the structured report object for `ConvertTo-Json`. |
+
+Each campaign reports its identity, target version, health status and reason, registered state, deadline, prompt count, last update time, observed next attempt, last run, last result, and which resources are present. A value that cannot be read stays unknown instead of being estimated, and a retry task that has never run reports no last result rather than a successful one. Task presence is queried directly, so a failed query is reported as unknown instead of as an absent task, and a campaign that rests on an unverified task is marked `unverified`. The report also states the installed template version and the supported WAU and PSADT baseline.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | The report was produced. |
+| `1` | The campaign registry is unavailable or could not be enumerated. |
+
+### Health checks
+
+[`diagnostics/Test-WauPsadtBridgeHealth.ps1`](diagnostics/Test-WauPsadtBridgeHealth.ps1) inspects an installed bridge and reports every check as `Pass`, `Fail`, or `Unknown`.
+
+```powershell
+pwsh -NoProfile -File ./diagnostics/Test-WauPsadtBridgeHealth.ps1
+pwsh -NoProfile -File ./diagnostics/Test-WauPsadtBridgeHealth.ps1 -InstallRoot 'C:\Program Files\WauPsadtBridge' -WauRoot 'C:\Program Files\Winget-AutoUpdate'
+pwsh -NoProfile -Command "./diagnostics/Test-WauPsadtBridgeHealth.ps1 -PassThru | ConvertTo-Json -Depth 6"
+```
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `-InstallRoot` | the native Program Files bridge root | Bridge installation to inspect. |
+| `-WauRoot` | the location recorded in `install-state.json` | Winget-AutoUpdate installation to inspect. |
+| `-PackageId` | none | Limit the campaign check to one exact Winget package ID. |
+| `-PassThru` | off | Emit the structured report object for `ConvertTo-Json`. |
+
+| Check | Passes when |
+|---|---|
+| `bridge-installation` | an installed template or installation state is present, and any installation state that exists is readable |
+| `template-entry-points` | every required template entry point exists |
+| `catalog` | the installed catalog passes the standalone validator |
+| `wau-handoff` | the Winget-AutoUpdate functions contain the bridge handoff and both bridge files |
+| `wau-backup` | the original file is restorable: it exists, carries no handoff, and matches the supported Winget-AutoUpdate file |
+| `wau-version` | the installed Winget-AutoUpdate version equals the supported version |
+| `winget` | the runtime Winget lookup resolves a path |
+| `campaigns` | every campaign is healthy and every verdict is verified |
+
+A check fails only when it established that its property does not hold: an expected file that is missing or present but invalid, or a campaign whose verified classification needs attention. `Unknown` means the check could not obtain the evidence it needed, for example because a component is not part of the installation or a value could not be read. Unknown checks do not fail the report.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | No check failed. |
+| `1` | At least one check failed. |
+
+### Diagnostics reference
+
+Catalog validation reads one file and needs no installed bridge. The status and health scripts read campaign registry state under `HKLM`, scheduled-task state, and files under Program Files and ProgramData, so an elevated session is normally required.
+
+| Source | Location |
+|---|---|
+| WAU log with the handoff and cleanup decisions | `%ProgramData%\Winget-AutoUpdate\Logs` |
+| PSADT package log for one catalog application | `%WinDir%\Logs\Software` |
+| Winget log from the SYSTEM execution path | `%WinDir%\System32\config\systemprofile\AppData\Local\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir` |
 
 ## Testing
 

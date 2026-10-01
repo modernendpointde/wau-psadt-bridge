@@ -20,7 +20,7 @@ pwsh -NoProfile -File ./tests/Run-Tests.ps1
 A successful run ends with:
 
 ```text
-All tests passed (8).
+All tests passed (11).
 ```
 
 The suite covers:
@@ -33,6 +33,7 @@ The suite covers:
 - Campaign lifecycle and staging cleanup
 - Framework component contracts for paths, task ownership, shortcut ownership, and prompt accounting
 - Shared mutex and update serialization behavior
+- Read-only catalog validation, campaign status, and installation health reports, including unknown-data handling
 
 The automated tests validate script contracts and isolated lifecycle behavior. They do not launch the PSAppDeployToolkit user interface, execute a real Winget upgrade, or create production scheduled tasks.
 
@@ -136,6 +137,20 @@ Expected result:
 - Native WAU processing does not update an application whose catalog entry is invalid.
 
 Restore the shipped catalog before continuing.
+
+### Diagnostics
+
+1. Install WAU PSADT Bridge on the test device.
+2. Run `pwsh -NoProfile -File ./diagnostics/Test-WauPsadtBridgeCatalog.ps1` and confirm that the shipped catalog is valid.
+3. Run `pwsh -NoProfile -File ./diagnostics/Test-WauPsadtBridgeHealth.ps1` and confirm that every check matches the installed components.
+4. Create and defer a campaign, then run `pwsh -NoProfile -Command "./diagnostics/Get-WauPsadtBridgeStatus.ps1 -PassThru | ConvertTo-Json -Depth 6"`.
+5. Compare the campaign registry state, task state, staging directory, and desktop shortcut before and after each command.
+
+Expected result:
+
+- The catalog validator, the status report, and the health report complete with their documented exit codes.
+- Stored campaign values appear next to live observations, and values that cannot be read are reported as unknown.
+- No command repairs, starts, or changes a bridge resource.
 
 ### Uninstallation
 

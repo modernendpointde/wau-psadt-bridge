@@ -8,12 +8,29 @@ $installer = Join-Path $repoRoot 'Install-WauPsadtBridge.ps1'
 $submit = Join-Path $repoRoot 'wau/Submit-WauPsadtUpdate.ps1'
 $updateApp = Join-Path $repoRoot 'wau/Update-App.ps1'
 $catalog = Join-Path $repoRoot 'catalog/apps.json'
+$contract = Join-Path $repoRoot 'wau/WauPsadt.BridgeContract.ps1'
 
 $errs = $null
 $null = [System.Management.Automation.Language.Parser]::ParseFile($installer, [ref]$null, [ref]$errs)
 Assert-True (-not $errs -or $errs.Count -eq 0) 'installer parses'
 
-$text = Get-Content -LiteralPath $installer -Raw
+$contractErrors = $null
+$null = [System.Management.Automation.Language.Parser]::ParseFile($contract, [ref]$null, [ref]$contractErrors)
+Assert-True (-not $contractErrors -or $contractErrors.Count -eq 0) 'bridge contract parses'
+
+# The installer loads the read-only WAU compatibility contract, so assertions below cover both files.
+$installerText = Get-Content -LiteralPath $installer -Raw
+$contractText = Get-Content -LiteralPath $contract -Raw
+$text = $installerText + $contractText
+
+Assert-True ($installerText -match 'WauPsadt\.BridgeContract\.ps1') 'installer loads the shared bridge contract'
+$declaredContract = [regex]::Match($installerText, "'([^']*WauPsadt[.]BridgeContract[.]ps1)'").Groups[1].Value
+Assert-True (-not [string]::IsNullOrWhiteSpace($declaredContract)) 'installer declares the contract path'
+$declaredPath = Join-Path $repoRoot ($declaredContract -replace [regex]::Escape([string][char]92), '/')
+Assert-True (Test-Path -LiteralPath $declaredPath -PathType Leaf) 'the declared contract path exists'
+foreach ($sharedName in @('Get-InstalledWauLocation', 'Get-NormalizedSha256', 'Get-WauInstalledVersion', 'Test-WauUpdateAppContainsHandoff', 'Test-WauOriginalUpdateAppBackup', 'SupportedWauVersion', 'SupportedWauUpdateAppSha256')) {
+    Assert-True ($contractText -match [regex]::Escape($sharedName)) "bridge contract provides $sharedName"
+}
 $submitText = Get-Content -LiteralPath $submit -Raw
 $updateText = Get-Content -LiteralPath $updateApp -Raw
 Assert-True ($text -match 'Join-Path \$script:BridgeInstallRoot ''bridge.catalog.json''') 'catalog install path'

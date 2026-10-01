@@ -262,7 +262,7 @@ Mapping to operation:
 
 `InstalledSameVersion` and `InstalledNewerVersion` are no-op states in the install lifecycle. A higher installed version is left in place. When an owned schedule is present (`Test-WauBridgeSchedulePresent`), the lifecycle calls `Complete-WauBridgeSchedule` (no UI, no installer).
 
-Install/upgrade uses the same evidence. Before WAU skips registry state in `Staged`, `Deferred`, or `InProgress`, it verifies the registry identity, StageRoot marker, schedule state, and complete retry-task contract. A proven but incomplete orphan is removed and may be recreated; any unproven collision is left untouched and fails closed for that package.
+Install/upgrade uses the same evidence. Before WAU skips registry state in `Staged`, `Deferred`, or `InProgress`, it verifies the registry identity, StageRoot marker, schedule state, and complete retry-task contract. A proven but incomplete orphan is removed and may be recreated; any unproven collision is left untouched and fails closed for that package. A task whose query fails is reported as unverified rather than absent, so the campaign is preserved.
 
 ## 10. Install lifecycle
 
@@ -387,7 +387,7 @@ The HKLM key holds `SchemaVersion=2`, `ResourceType=WauBridgeCampaign`, identiti
 
 `Set-WauBridgeCampaignState` writes this contract.
 
-Removal requires matching CampaignId and PackageId. WAU-side active-campaign detection accepts only `Staged`, `Deferred`, or `InProgress`, then validates all related resources before deciding whether the campaign is healthy, safely recoverable, or blocked by an unproven collision.
+Removal requires matching CampaignId and PackageId. WAU-side active-campaign detection accepts only `Staged`, `Deferred`, or `InProgress`, then validates all related resources before deciding whether the campaign is healthy, safely recoverable, or blocked. A blocked campaign is left untouched. The retry and cleanup tasks are read as tri-state observations: absence is recognised from a structured object-not-found error, and any other failure counts as unverified rather than absent, so a failed query never turns a healthy campaign into a recoverable orphan. The trade-off is deliberate: while a task query keeps failing, a stale orphan stays in place instead of being reconciled.
 
 ### 14.5 Desktop shortcut and completion
 
@@ -516,6 +516,9 @@ Before replacing active packages, map existing campaign resources by CampaignId,
 | Desktop shortcut contract | `Framework/WauBridge.Shortcuts.ps1` |
 | Winget | `Framework/WauBridge.Winget.ps1` |
 | WauBridge.Campaign.json overlay | `Framework/WauBridge.CampaignJson.ps1` |
+| Catalog file rules | `wau/Submit-WauPsadtUpdate.ps1`, reused read-only by `diagnostics/` |
+| Campaign ownership rules | `wau/WauPsadt.CampaignContract.ps1`, reused read-only by `diagnostics/` |
+| WAU compatibility contract | `wau/WauPsadt.BridgeContract.ps1`, shared by the installer and `diagnostics/` |
 
 ## 22. Campaign mode via WauBridge.Campaign.json
 
@@ -546,3 +549,23 @@ WAU calls `Submit-WauPsadtUpdate` once per available package, in list order, and
 On a deferral-eligible bootstrap the lifecycle registers the retry task, releases the mutex, then starts the owned task. That retry process immediately takes the mutex again for Welcome. While that dialog is open, the WAU foreach continues to the next catalog ID. That ID’s bootstrap calls `Enter-WauBridgeMutex`, gets no handle, sets exit code **1618**, and returns. `Submit` logs the bootstrap exit code and still returns `$true`, so WAU does not run native winget for that ID in this cycle.
 
 There is no queue. The skipped package remains at the installed version until a later WAU cycle (or its own reminder, if it already had a schedule). The mutex is one lock for UI and winget so two winget upgrades and two PSADT UIs do not overlap.
+
+## 24. Read-only diagnostics
+
+Three repository entry points inspect an installation without repairing, starting, or registering anything. They reuse the canonical sources listed in section 21 instead of restating the catalog, ownership, or WAU-compatibility rules.
+
+| Entry point | Purpose | Exit codes |
+|---|---|---|
+| `diagnostics/Test-WauPsadtBridgeCatalog.ps1` | Validate a catalog file with the runtime rules and report the effective values per entry. Needs no installed bridge. | `0` valid; `1` missing, unreadable, or structurally invalid; `2` valid structure with at least one invalid entry |
+| `diagnostics/Get-WauPsadtBridgeStatus.ps1` | Report campaign identity, target version, health, deadline, prompt count, next attempt, and last result, keeping stored values apart from live observations. | `0` report produced; `1` campaign registry unavailable or not enumerable |
+| `diagnostics/Test-WauPsadtBridgeHealth.ps1` | Check installation state, template entry points, catalog, WAU handoff and backup, WAU version, Winget availability, and campaign health. | `0` no check failed; `1` at least one check failed |
+
+A check reports `Fail` only when it established that its property does not hold; missing evidence yields `Unknown` instead, and unknown checks do not fail the report. `BlockedUnverified` and an unverified `Healthy` verdict count as unknown rather than as a healthy or orphaned campaign, so a failed task query never becomes a cleanup decision.
+
+Catalog validation reads one file. The status and health scripts read campaign registry state under `HKLM`, task state, and files under Program Files and ProgramData, so an elevated session is normally required.
+
+| Source | Location |
+|---|---|
+| WAU log with the handoff and cleanup decisions | `%ProgramData%\Winget-AutoUpdate\Logs` |
+| PSADT package log, from `Config/config.psd1` `LogPath` with `LogToSubfolder` and `LogToHierarchy` disabled | `%WinDir%\Logs\Software` |
+| Winget log from the SYSTEM execution path | `%WinDir%\System32\config\systemprofile\AppData\Local\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir` |
